@@ -1,28 +1,23 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
-  engineType      = "library"
-  output          = "../node_modules/.prisma/client"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  }
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
 
-// 1. Tabla de Usuarios y Roles para Login
+// 1. Usuarios y Roles
 model User {
   id        String   @id @default(uuid())
   name      String?
   email     String   @unique
-  password  String   
+  password  String
   role      Role     @default(CLIENTE)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  sales     Sale[]   
+
+  sales     Sale[]
 }
 
 enum Role {
@@ -30,38 +25,50 @@ enum Role {
   CLIENTE
 }
 
-// 2. Catálogo / Inventario de Plantas e Insumos
-model Product {
-  id          String   @id @default(uuid())
-  code        String   @unique // Ej: ART-001
-  name        String   // Ej: Ficus Lyrata
-  category    String   // Ej: Interior, Exterior, Substratos
-  cost        Float    // Costo de compra
-  price       Float    // Precio de venta
-  stock       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// 2. Categorías con Margen de Ganancia
+model Category {
+  id            String    @id @default(uuid())
+  name          String    @unique // Ej: Plantas de Interior, Sustratos
+  defaultMargin Float     // Porcentaje (Ej: 100 para 100%, 120 para 120%)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  saleItems   SaleItem[]
+  products      Product[]
 }
 
-// 3. Ventas (POS / CRM)
+// 3. Catálogo / Inventario de Productos
+model Product {
+  id         String   @id @default(uuid())
+  code       String   @unique // Ej: ART-001
+  name       String   // Ej: Ficus Lyrata
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  cost       Float    // Costo de compra
+  price      Float    // Precio de venta
+  stock      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  saleItems  SaleItem[]
+}
+
+// 4. Ventas (POS / CRM)
 model Sale {
   id        String     @id @default(uuid())
   total     Float
   userId    String?
   user      User?      @relation(fields: [userId], references: [id])
   createdAt DateTime   @default(now())
-  
+
   items     SaleItem[]
 }
 
 model SaleItem {
-  id        String  @id @default(uuid())
+  id        String   @id @default(uuid())
   saleId    String
-  sale      Sale    @relation(fields: [saleId], references: [id])
+  sale      Sale     @relation(fields: [saleId], references: [id])
   productId String
-  product   Product @relation(fields: [productId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
   quantity  Int
   price     Float
 }
