@@ -1,133 +1,85 @@
-'use client';
+"use client";
 
 import React, { useState } from 'react';
-import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Leaf, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { Leaf, Lock, Mail } from 'lucide-react';
 
 export default function LoginPage() {
+    const [email, setEmail] = useState<string>('');
+    const [password, setPassword] = useState<string>('');
+    const [error, setError] = useState<string>('');
     const router = useRouter();
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState<string | null>(null);
-    const [cargando, setCargando] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        setError(null);
-        setCargando(true);
+        setError('');
 
-        try {
-            const res = await signIn('credentials', {
-                email: email.trim().toLowerCase(),
-                password: password,
-                redirect: false,
-            });
-
-            if (res?.error) {
-                setError('El correo o la contraseña no coinciden con nuestros registros del vivero.');
-                setCargando(false);
-            } else {
-                // ¡Login exitoso! Redirigimos directo a la raíz del sitio
-                router.push('/vivero');
-                router.refresh();
-            }
-        } catch (err) {
-            setError('Ocurrió un error inesperado en el servidor. Intentá de nuevo.');
-            setCargando(false);
+        // LÓGICA DE ROLES
+        if (email === 'admin@vivero.com' && password === 'admin123') {
+            localStorage.setItem('user_role', 'ADMIN');
+            router.push('/admin');
+        } else if (email === 'cliente@vivero.com' && password === 'user123') {
+            localStorage.setItem('user_role', 'CLIENTE');
+            router.push('/tienda');
+        } else {
+            setError('Credenciales incorrectas. Probá con admin@vivero.com / admin123 o cliente@vivero.com / user123');
         }
     };
 
     return (
-        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12 sm:px-6 lg:px-8 bg-stone-50">
-            <div className="w-full max-w-md space-y-8 rounded-2xl border border-stone-200 bg-white p-8 shadow-sm">
+        <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4 text-stone-800">
+            <div className="bg-white p-8 rounded-2xl border border-stone-200 shadow-xl max-w-md w-full space-y-6">
 
-                {/* Encabezado del Formulario */}
-                <div className="flex flex-col items-center text-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 mb-4">
-                        <Leaf className="h-6 w-6" />
+                <div className="flex flex-col items-center gap-2 text-center">
+                    <div className="p-3 bg-emerald-700 rounded-2xl text-white shadow-md">
+                        <Leaf className="h-8 w-8" />
                     </div>
-                    <h2 className="text-2xl font-bold tracking-tight text-stone-900">
-                        Ingresá a tu cuenta
-                    </h2>
-                    <p className="mt-2 text-sm text-stone-500">
-                        Gestioná tus compras o administrá el stock del vivero
-                    </p>
+                    <h1 className="text-2xl font-bold text-stone-900">Sistema Vivero</h1>
+                    <p className="text-xs text-stone-500 font-medium">CRM / ERP de Gestión Comercial</p>
                 </div>
 
-                {/* Alerta de Error */}
-                {error && (
-                    <div className="flex items-start gap-2.5 rounded-lg bg-red-50 p-3.5 text-sm text-red-800 border border-red-200">
-                        <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                        <span>{error}</span>
-                    </div>
-                )}
+                <form onSubmit={handleLogin} className="space-y-4">
+                    {error && (
+                        <div className="text-xs text-red-700 bg-red-50 p-3 rounded-lg border border-red-200 font-medium">
+                            {error}
+                        </div>
+                    )}
 
-                {/* Formulario */}
-                <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
-
-                    {/* Campo: Email */}
                     <div>
-                        <label htmlFor="email" className="block text-sm font-medium text-stone-700 mb-1.5">
-                            Correo Electrónico
-                        </label>
+                        <label className="block text-xs font-semibold text-stone-600 mb-1">Correo Electrónico</label>
                         <div className="relative">
-                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-400">
-                                <Mail className="h-4 w-4" />
-                            </div>
+                            <Mail className="h-4 w-4 absolute left-3 top-3 text-stone-400" />
                             <input
-                                id="email"
-                                name="email"
                                 type="email"
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                disabled={cargando}
-                                className="block w-full rounded-lg border border-stone-300 bg-stone-50 py-2.5 pl-10 pr-3 text-sm text-stone-900 placeholder-stone-400 focus:border-emerald-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600 disabled:opacity-60 transition"
-                                placeholder="ejemplo@vivero.com"
+                                className="w-full rounded-lg border border-stone-300 pl-9 pr-3 py-2 text-sm bg-stone-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                                placeholder="usuario@vivero.com"
                             />
                         </div>
                     </div>
 
-                    {/* Campo: Contraseña */}
                     <div>
-                        <label htmlFor="password" className="block text-sm font-medium text-stone-700 mb-1.5">
-                            Contraseña
-                        </label>
+                        <label className="block text-xs font-semibold text-stone-600 mb-1">Contraseña</label>
                         <div className="relative">
-                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-400">
-                                <Lock className="h-4 w-4" />
-                            </div>
+                            <Lock className="h-4 w-4 absolute left-3 top-3 text-stone-400" />
                             <input
-                                id="password"
-                                name="password"
                                 type="password"
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                disabled={cargando}
-                                className="block w-full rounded-lg border border-stone-300 bg-stone-50 py-2.5 pl-10 pr-3 text-sm text-stone-900 placeholder-stone-400 focus:border-emerald-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600 disabled:opacity-60 transition"
-                                placeholder="••••••••"
+                                className="w-full rounded-lg border border-stone-300 pl-9 pr-3 py-2 text-sm bg-stone-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                             />
                         </div>
                     </div>
 
-                    {/* Botón de Enviar */}
                     <button
                         type="submit"
-                        disabled={cargando}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-70 transition cursor-pointer"
+                        className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-2.5 rounded-lg text-sm transition shadow-md cursor-pointer"
                     >
-                        {cargando ? (
-                            <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Validando credenciales...
-                            </>
-                        ) : (
-                            'Iniciar Sesión'
-                        )}
+                        Ingresar al Sistema
                     </button>
-
                 </form>
             </div>
         </div>
