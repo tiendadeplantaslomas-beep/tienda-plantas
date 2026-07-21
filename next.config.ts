@@ -1,7 +1,7 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from "map";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  /* Opciones de configuración normales aquí si las hubiera */
 };
 
 export default nextConfig;
