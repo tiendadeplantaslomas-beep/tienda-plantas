@@ -1,74 +1,72 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
-// 1. Usuarios y Roles
-model User {
-  id        String   @id @default(uuid())
-  name      String?
-  email     String   @unique
-  password  String
-  role      Role     @default(CLIENTE)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  sales     Sale[]
+generator client {
+  provider = "prisma-client-js"
 }
 
-enum Role {
-  ADMIN
-  CLIENTE
-}
-
-// 2. Categorías con Margen de Ganancia
 model Category {
-  id            String    @id @default(uuid())
-  name          String    @unique // Ej: Plantas de Interior, Sustratos
-  defaultMargin Float     // Porcentaje (Ej: 100 para 100%, 120 para 120%)
+  id            String    @id @default(cuid())
+  name          String    @unique
+  defaultMargin Float     @default(100)
+  products      Product[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-
-  products      Product[]
 }
 
-// 3. Catálogo / Inventario de Productos
+model Supplier {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  address   String?   // Dirección o Link de Google Maps
+  phone     String?
+  notes     String?
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
 model Product {
-  id         String   @id @default(uuid())
-  code       String   @unique // Ej: ART-001
-  name       String   // Ej: Ficus Lyrata
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id])
-  cost       Float    // Costo de compra
-  price      Float    // Precio de venta
-  stock      Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String    @id @default(cuid())
+  code        String    @unique
+  name        String
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id])
+  
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
 
-  saleItems  SaleItem[]
+  cost        Int       // Costo base de compra
+  otherCosts  Int       @default(0) // Flete, transporte, etc.
+  price       Int       // Precio final al público
+  margin      Float     @default(100)
+  taxRate     Float     @default(21)
+  
+  // Gestión de existencias
+  trackStock  Boolean   @default(true)
+  stock       Int       @default(0)
+  minStock    Int       @default(2) // Cantidad de advertencia / stock mínimo
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  saleItems   SaleItem[]
 }
 
-// 4. Ventas (POS / CRM)
 model Sale {
-  id        String     @id @default(uuid())
-  total     Float
-  userId    String?
-  user      User?      @relation(fields: [userId], references: [id])
+  id        String     @id @default(cuid())
+  total     Int
   createdAt DateTime   @default(now())
-
   items     SaleItem[]
 }
 
 model SaleItem {
-  id        String   @id @default(uuid())
+  id        String   @id @default(cuid())
   saleId    String
   sale      Sale     @relation(fields: [saleId], references: [id])
   productId String
   product   Product  @relation(fields: [productId], references: [id])
   quantity  Int
-  price     Float
+  price     Int
 }
