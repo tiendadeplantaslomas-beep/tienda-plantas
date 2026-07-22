@@ -1,8 +1,35 @@
 'use server';
 
+import { prisma } from '@/lib/prisma'; // o la ruta donde tengas tu instancia de Prisma/DB
 import { revalidatePath } from 'next/cache';
-// Asegúrate de ajustar la ruta de importación de tu cliente de Prisma o Base de Datos
-import { prisma } from '@/lib/prisma';
+
+// ... tus otras funciones (getCategories, createCategory, etc.) ...
+
+export async function deleteCategory(categoryId: string) {
+    try {
+        // 1. Verificamos si hay productos usando esta categoría para evitar inconsistencias
+        const productsCount = await prisma.product.count({
+            where: { categoryId }
+        });
+
+        if (productsCount > 0) {
+            return {
+                error: `No se puede eliminar: hay ${productsCount} producto(s) asignado(s) a esta categoría.`
+            };
+        }
+
+        // 2. Si está libre, la borramos
+        await prisma.category.delete({
+            where: { id: categoryId }
+        });
+
+        revalidatePath('/productos');
+        return { success: true };
+    } catch (error) {
+        console.error('Error al eliminar categoría:', error);
+        return { error: 'Error interno al intentar eliminar la categoría.' };
+    }
+}
 
 export interface ImportRowData {
     Nombre?: string;
