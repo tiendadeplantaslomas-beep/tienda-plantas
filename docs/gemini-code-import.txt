@@ -1,0 +1,11 @@
+Nombre,Categoria,Proveedor,CostoBase,OtrosCostos,MargenPct,AlicuotaIVA,StockInicial,AlertaStockBajo,StockMinimo
+"Sansevieria Trifasciata","INTERIOR","Vivero Central",1200,100,50,21,10,SI,3
+"Potus Portamacetas","INTERIOR","Vivero Central",800,0,100,21,15,NO,0
+"Maceta Rotomoldeada N30","MACETAS - PLASTICAS","Plásticos Sur",2500,200,60,21,20,SI,5
+"Maceta Cemento Cilindro 20cm","MACETAS - CEMENTO","Artesanías Cemento",1800,150,50,21,8,SI,2
+"Sustrato Premium 25L","SUSTRATOS","Bertinat",1500,100,40,21,30,SI,10
+"Glifosato / Insecticida Mapey","AGROQUIMICOS - INSECTICIDAS","Agroquímica Lomas",900,0,50,21,12,SI,4
+"Fertilizante Triple 15 1kg","AGROQUIMICOS - FERTILIZANTES","Agroquímica Lomas",1100,50,50,21,25,SI,5
+"Plantín Copete / Flor","PLANTIN","Flores Locales",300,0,100,21,100,NO,0
+"Tijera de Podar Acero","ACCESORIOS","Herramientas Pro",3500,0,45,21,5,SI,2
+"Farol Decorativo Chapa","DECO","Deco Home",4200,300,50,21,4,SI,1
