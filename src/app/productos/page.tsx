@@ -48,11 +48,22 @@ interface Product {
     minStock: number;
 }
 
+// Familias principales para la barra superior
+const QUICK_FAMILIES = [
+    { id: 'ALL', label: 'Todas las Familias', icon: '🪴' },
+    { id: 'PLANTAS', label: 'Plantas', icon: '🌿' },
+    { id: 'SUSTRATOS', label: 'Sustratos', icon: '🪵' },
+    { id: 'MACETAS', label: 'Macetas', icon: '🪴' },
+];
+
 export default function ProductosPage() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // --- FILTRO DE FAMILIA RÁPIDA ---
+    const [selectedFamily, setSelectedFamily] = useState<string>('ALL');
 
     // --- CATEGORÍA ---
     const [categorySearch, setCategorySearch] = useState('');
@@ -365,7 +376,7 @@ export default function ProductosPage() {
     const handleDownloadTemplate = () => {
         const csvContent = [
             'Nombre,Categoria,Proveedor,CostoBase,OtrosCostos,StockInicial,AlertaStockBajo,StockMinimo',
-            'Sansevieria Trifasciata,INTERIOR,Vivero Central,1200,100,10,SI,3'
+            'Sansevieria Trifasciata,PLANTAS,Vivero Central,1200,100,10,SI,3'
         ].join('\n');
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -400,13 +411,24 @@ export default function ProductosPage() {
     const filteredCats = categories.filter(c => normalizeText(c.name).includes(normalizeText(categorySearch)));
     const filteredSups = suppliers.filter(s => normalizeText(s.name).includes(normalizeText(supplierSearch)));
 
+    // FILTRADO DE PRODUCTOS POR FAMILIA + BUSCADOR GENERAL
     const filteredProducts = products.filter((p) => {
+        const catName = normalizeText(p.category?.name || '');
+
+        // 1. Filtro por familia
+        if (selectedFamily !== 'ALL') {
+            if (!catName.includes(selectedFamily)) {
+                return false;
+            }
+        }
+
+        // 2. Buscador general
         if (!globalSearch) return true;
         const term = normalizeText(globalSearch);
         return (
             normalizeText(p.name).includes(term) ||
             normalizeText(p.code).includes(term) ||
-            normalizeText(p.category?.name || '').includes(term) ||
+            catName.includes(term) ||
             normalizeText(p.supplier?.name || '').includes(term)
         );
     });
@@ -415,7 +437,7 @@ export default function ProductosPage() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [globalSearch]);
+    }, [globalSearch, selectedFamily]);
 
     const paginatedProducts = filteredProducts.slice(
         (currentPage - 1) * itemsPerPage,
@@ -423,7 +445,41 @@ export default function ProductosPage() {
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 p-4 md:p-6 space-y-6 max-w-7xl mx-auto text-slate-800">
+        <div className="min-h-screen bg-slate-50 p-4 md:p-6 space-y-5 max-w-7xl mx-auto text-slate-800">
+
+            {/* 1. BARRA SUPERIOR DE FAMILIAS RÁPIDAS (PLANTAS - SUSTRATOS - MACETAS) */}
+            <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm flex items-center justify-between gap-2 overflow-x-auto">
+                <div className="flex items-center gap-1.5 min-w-max">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2">Acceso Rápido:</span>
+                    {QUICK_FAMILIES.map((fam) => {
+                        const active = selectedFamily === fam.id;
+                        return (
+                            <button
+                                key={fam.id}
+                                type="button"
+                                onClick={() => setSelectedFamily(fam.id)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${active
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                            >
+                                <span>{fam.icon}</span>
+                                <span>{fam.label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {selectedFamily !== 'ALL' && (
+                    <button
+                        onClick={() => setSelectedFamily('ALL')}
+                        className="text-[11px] font-semibold text-emerald-700 hover:underline px-2 whitespace-nowrap"
+                    >
+                        ✕ Quitar Filtro
+                    </button>
+                )}
+            </div>
+
             {/* ENCABEZADO Y ACCIONES */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-4 border-slate-200 gap-3">
                 <div>
@@ -454,7 +510,7 @@ export default function ProductosPage() {
                 </div>
             )}
 
-            {/* FORMULARIO AJUSTADO Y MÁS CÓMODO */}
+            {/* FORMULARIO AJUSTADO Y COMPACTO */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-4">
                 <div className="flex items-center justify-between border-b pb-2">
                     <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2 uppercase tracking-wide">
@@ -667,7 +723,7 @@ export default function ProductosPage() {
                     <div className="p-10 text-center flex flex-col items-center">
                         <span className="text-3xl mb-2">🪴</span>
                         <h4 className="text-slate-700 font-bold text-xs mb-1">No se encontraron productos</h4>
-                        <p className="text-slate-400 text-xs">Ajustá la búsqueda o crea uno nuevo arriba.</p>
+                        <p className="text-slate-400 text-xs">Ajustá la búsqueda o la familia seleccionada arriba.</p>
                     </div>
                 ) : (
                     <>
@@ -702,7 +758,6 @@ export default function ProductosPage() {
                                                     {p.supplier ? p.supplier.name : '-'}
                                                 </td>
 
-                                                {/* COSTO TOTAL CALCULADO */}
                                                 <td className="px-3 py-2 text-right">
                                                     <div className="font-bold text-slate-700">${costoTotalCalculado.toLocaleString('es-AR')}</div>
                                                     {(p.otherCosts > 0) && (
