@@ -17,42 +17,44 @@ model Category {
 }
 
 model Supplier {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  address   String?   // Dirección o Link de Google Maps
+  id        String     @id @default(cuid())
+  name      String     @unique
+  address   String?    // Dirección o Link de Google Maps
   phone     String?
   notes     String?
   products  Product[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  purchases Purchase[] // Relación con histórico de compras por lote
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
 model Product {
-  id          String   @id @default(cuid())
-  code        String   @unique
+  id          String         @id @default(cuid())
+  code        String         @unique
   name        String
   categoryId  String
-  category    Category @relation(fields: [categoryId], references: [id])
+  category    Category       @relation(fields: [categoryId], references: [id])
   
   supplierId  String?
-  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  supplier    Supplier?      @relation(fields: [supplierId], references: [id])
 
-  cost        Int       // Costo base de compra
-  otherCosts  Int       @default(0) // Flete, transporte, etc.
-  price       Int       // Precio final al público
-  margin      Float     @default(100)
-  taxRate     Float     @default(21)
+  cost        Int            // Costo base de compra
+  otherCosts  Int            @default(0) // Flete, transporte, etc.
+  price       Int            // Precio final al público
+  margin      Float          @default(100)
+  taxRate     Float          @default(21)
   
   // Gestión de existencias
-  trackStock  Boolean   @default(true)
-  stock       Int       @default(0)
-  minStock    Int       @default(2) // Cantidad de advertencia / stock mínimo
+  trackStock  Boolean        @default(true)
+  stock       Int            @default(0)
+  minStock    Int            @default(2) // Cantidad de advertencia / stock mínimo
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
-  saleItems   SaleItem[]
-  movements   StockMovement[]
+  saleItems     SaleItem[]
+  purchaseItems PurchaseItem[] // Relación con ítems de compras
+  movements     StockMovement[]
 }
 
 model StockMovement {
@@ -60,13 +62,52 @@ model StockMovement {
   productId     String
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   quantity      Int
-  type          String   // 'IN', 'OUT', 'ADJUSTMENT'
+  type          String   // 'IN', 'OUT', 'ADJUSTMENT', 'PURCHASE'
   notes         String?
   previousStock Int
   newStock      Int
   createdAt     DateTime @default(now())
 }
 
+// -------------------------------------------------------------
+// COMPRAS EN LOTE (FACTURAS / REMITOS / PRESUPUESTOS)
+// -------------------------------------------------------------
+model Purchase {
+  id              String         @id @default(cuid())
+  docType         String         @default("FACTURA") // 'FACTURA', 'REMITO', 'PRESUPUESTO'
+  docNumber       String?        // Número de comprobante
+  date            DateTime       @default(now()) // Fecha de la compra / carga
+  
+  supplierId      String
+  supplier        Supplier       @relation(fields: [supplierId], references: [id])
+  
+  subtotal        Int            // Suma de (costo * cantidad)
+  otherCostsTotal Int            @default(0) // Total Flete / Gastos varios ($)
+  total           Int            // subtotal + otros costos
+
+  notes           String?
+  createdAt       DateTime       @default(now())
+  
+  items           PurchaseItem[]
+}
+
+model PurchaseItem {
+  id                 String   @id @default(cuid())
+  purchaseId         String
+  purchase           Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  
+  productId          String
+  product            Product  @relation(fields: [productId], references: [id])
+
+  quantity           Int
+  unitCost           Int      // Costo unitario base
+  allocatedOtherCost Int      @default(0) // Flete por unidad
+  finalUnitCost      Int      // unitCost + allocatedOtherCost
+}
+
+// -------------------------------------------------------------
+// VENTAS Y DETALLE
+// -------------------------------------------------------------
 model Sale {
   id        String     @id @default(cuid())
   total     Int

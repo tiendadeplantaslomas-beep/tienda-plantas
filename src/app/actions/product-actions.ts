@@ -1,325 +1,410 @@
 'use server';
 
-import { prisma } from '@/lib/prisma'; // o la ruta donde tengas tu instancia de Prisma/DB
+import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 
-// ... tus otras funciones (getCategories, createCategory, etc.) ...
+// ==========================================
+// INTERFACES
+// ==========================================
 
-export async function deleteCategory(categoryId: string) {
-    try {
-        // 1. Verificamos si hay productos usando esta categoría para evitar inconsistencias
-        const productsCount = await prisma.product.count({
-            where: { categoryId }
-        });
-
-        if (productsCount > 0) {
-            return {
-                error: `No se puede eliminar: hay ${productsCount} producto(s) asignado(s) a esta categoría.`
-            };
-        }
-
-        // 2. Si está libre, la borramos
-        await prisma.category.delete({
-            where: { id: categoryId }
-        });
-
-        revalidatePath('/productos');
-        return { success: true };
-    } catch (error) {
-        console.error('Error al eliminar categoría:', error);
-        return { error: 'Error interno al intentar eliminar la categoría.' };
-    }
+export interface ProductInput {
+    id?: string;
+    code: string;
+    name: string;
+    categoryId: string;
+    supplierId?: string | null;
+    cost: number;
+    otherCosts?: number;
+    margin: number;
+    taxRate?: number;
+    stock?: number;
+    minStock?: number;
+    trackStock?: boolean;
 }
 
-export interface ImportRowData {
-    Nombre?: string;
-    Categoria?: string;
-    Proveedor?: string;
-    CostoBase?: string | number;
-    OtrosCostos?: string | number;
-    StockInicial?: string | number;
-    AlertaStockBajo?: string;
-    StockMinimo?: string | number;
-    [key: string]: string | number | undefined;
+export interface BatchProductInput {
+    code: string;
+    name: string;
+    categoryId: string;
+    supplierId?: string | null;
+    cost: number;
+    otherCosts?: number;
+    margin: number;
+    stock?: number;
+    minStock?: number;
 }
 
-export interface ImportErrorLog {
-    rowNumber: number;
-    productName: string;
-    category: string;
-    reason: string;
-}
-
-const normalizeText = (text: string) =>
-    text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
-
-export async function getCategories() {
-    return await prisma.category.findMany({
-        orderBy: { name: 'asc' }
-    });
-}
-
-export async function getSuppliers() {
-    return await prisma.supplier.findMany({
-        orderBy: { name: 'asc' }
-    });
-}
+// ==========================================
+// ACCIONES DE PRODUCTOS
+// ==========================================
 
 export async function getProducts() {
-    return await prisma.product.findMany({
-        include: { category: true, supplier: true },
-        orderBy: { name: 'asc' }
-    });
-}
-
-export async function generateNextProductCode(categoryId: string): Promise<string> {
-    const category = await prisma.category.findUnique({ where: { id: categoryId } });
-    if (!category) return 'PROD-0001';
-
-    const prefix = category.name.substring(0, 3).toUpperCase();
-    const count = await prisma.product.count({ where: { categoryId } });
-    const nextSeq = (count + 1).toString().padStart(4, '0');
-
-    return `${prefix}-${nextSeq}`;
-}
-
-export async function createCategory(name: string, defaultMargin: number = 100) {
     try {
-        const category = await prisma.category.create({
-            data: {
-                name: name.trim().toUpperCase(),
-                defaultMargin: defaultMargin || 100
-            }
+        const products = await prisma.product.findMany({
+            include: {
+                category: true,
+                supplier: true,
+            },
+            orderBy: {
+                updatedAt: 'desc',
+            },
         });
-        revalidatePath('/productos');
-        return { category };
+        return products;
     } catch (error) {
-        console.error('Error al crear categoría:', error);
-        return { error: 'No se pudo crear la categoría.' };
+        console.error('Error al obtener productos:', error);
+        return [];
     }
 }
 
-export async function createSupplier(data: { name: string; address?: string; phone?: string; notes?: string }) {
+export async function getProductById(id: string) {
     try {
-        const supplier = await prisma.supplier.create({
-            data: {
-                name: data.name.trim().toUpperCase(),
-                address: data.address || null,
-                phone: data.phone || null,
-                notes: data.notes || null,
-            }
+        return await prisma.product.findUnique({
+            where: { id },
+            include: {
+                category: true,
+                supplier: true,
+            },
         });
-        revalidatePath('/productos');
-        return { supplier };
     } catch (error) {
-        console.error('Error al crear proveedor:', error);
-        return { error: 'No se pudo crear el proveedor.' };
+        console.error('Error al obtener producto por ID:', error);
+        return null;
     }
 }
 
-export async function saveProduct(formData: FormData) {
+export async function upsertProduct(data: ProductInput) {
     try {
-        const id = formData.get('id') as string || null;
-        const name = (formData.get('name') as string).trim().toUpperCase();
-        const categoryId = formData.get('categoryId') as string;
-        const supplierId = (formData.get('supplierId') as string) || null;
+        const { id, code, name, categoryId, supplierId, cost, otherCosts = 0, margin, taxRate = 21, stock = 0, minStock = 2, trackStock = true } = data;
 
-        const cost = Math.round(parseFloat(formData.get('cost') as string) || 0);
-        const otherCosts = Math.round(parseFloat(formData.get('otherCosts') as string) || 0);
-        const margin = parseFloat(formData.get('margin') as string) || 100;
-        const taxRate = parseFloat(formData.get('taxRate') as string) || 21;
-
-        const trackStock = formData.get('trackStock') === 'true';
-        const stock = parseInt(formData.get('stock') as string, 10) || 0;
-        const minStock = parseInt(formData.get('minStock') as string, 10) || 0;
-
-        // Calcular precio final
-        const totalCost = cost + otherCosts;
-        let priceNoTax = 0;
-        if (margin >= 100) {
-            priceNoTax = totalCost * (1 + margin / 100);
-        } else {
-            priceNoTax = totalCost / (1 - margin / 100);
-        }
-        const price = Math.round(priceNoTax * (1 + taxRate / 100));
-
-        let code = formData.get('code') as string;
-        if (!id || !code) {
-            code = await generateNextProductCode(categoryId);
+        if (!code.trim() || !name.trim() || !categoryId) {
+            return { error: 'Código, Nombre y Categoría son obligatorios.' };
         }
 
-        const productData = {
-            code,
-            name,
-            categoryId,
-            supplierId: supplierId || null,
-            cost,
-            otherCosts,
-            margin,
-            taxRate,
-            price,
-            trackStock,
-            stock,
-            minStock
-        };
+        const upperCode = code.trim().toUpperCase();
+        const upperName = name.trim().toUpperCase();
+
+        const numericCost = Number(cost) || 0;
+        const numericOtherCosts = Number(otherCosts) || 0;
+        const numericMargin = Number(margin) || 100;
+
+        const totalCost = numericCost + numericOtherCosts;
+        const calculatedPrice = Math.round(totalCost * (1 + numericMargin / 100));
+
+        let product;
 
         if (id) {
-            await prisma.product.update({ where: { id }, data: productData });
+            product = await prisma.product.update({
+                where: { id },
+                data: {
+                    code: upperCode,
+                    name: upperName,
+                    categoryId,
+                    supplierId: supplierId || null,
+                    cost: numericCost,
+                    otherCosts: numericOtherCosts,
+                    margin: numericMargin,
+                    price: calculatedPrice,
+                    taxRate: Number(taxRate) || 21,
+                    minStock: Number(minStock) || 2,
+                    trackStock: Boolean(trackStock),
+                },
+                include: {
+                    category: true,
+                    supplier: true,
+                }
+            });
         } else {
-            await prisma.product.create({ data: productData });
+            product = await prisma.product.create({
+                data: {
+                    code: upperCode,
+                    name: upperName,
+                    categoryId,
+                    supplierId: supplierId || null,
+                    cost: numericCost,
+                    otherCosts: numericOtherCosts,
+                    margin: numericMargin,
+                    price: calculatedPrice,
+                    stock: Number(stock) || 0,
+                    minStock: Number(minStock) || 2,
+                    trackStock: Boolean(trackStock),
+                    taxRate: Number(taxRate) || 21,
+                },
+                include: {
+                    category: true,
+                    supplier: true,
+                }
+            });
         }
 
         revalidatePath('/productos');
-        return { success: true };
-    } catch (error) {
-        console.error('Error guardando producto:', error);
-        return { error: 'No se pudo guardar el producto.' };
+        revalidatePath('/stock');
+        revalidatePath('/compras');
+
+        return { success: true, product };
+    } catch (error: any) {
+        console.error('Error al guardar producto:', error);
+        if (error.code === 'P2002') {
+            return { error: 'Ya existe un producto con ese código.' };
+        }
+        return { error: 'Error interno al procesar el producto.' };
     }
 }
+
+export const saveProduct = upsertProduct;
 
 export async function deleteProduct(id: string) {
     try {
-        await prisma.product.delete({ where: { id } });
+        await prisma.product.delete({
+            where: { id },
+        });
+
+        revalidatePath('/productos');
+        revalidatePath('/stock');
+        revalidatePath('/compras');
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error al eliminar producto:', error);
+        if (error.code === 'P2003') {
+            return { error: 'No se puede eliminar un producto que ya tiene historial de movimientos, ventas o compras.' };
+        }
+        return { error: 'Error al intentar eliminar el producto.' };
+    }
+}
+
+export async function generateNextProductCode(categoryId?: string) {
+    try {
+        const count = await prisma.product.count();
+        const nextNum = (count + 1).toString().padStart(4, '0');
+        return `PRD-${nextNum}`;
+    } catch (error) {
+        console.error('Error al generar código:', error);
+        return `PRD-${Date.now().toString().slice(-4)}`;
+    }
+}
+
+export async function importProductsBatch(products: BatchProductInput[]) {
+    try {
+        if (!products || products.length === 0) {
+            return { error: 'No hay productos para importar.' };
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+            let createdCount = 0;
+            let updatedCount = 0;
+
+            for (const item of products) {
+                if (!item.code || !item.name || !item.categoryId) continue;
+
+                const upperCode = item.code.trim().toUpperCase();
+                const upperName = item.name.trim().toUpperCase();
+
+                const numericCost = Number(item.cost) || 0;
+                const numericOtherCosts = Number(item.otherCosts) || 0;
+                const numericMargin = Number(item.margin) || 100;
+
+                const totalCost = numericCost + numericOtherCosts;
+                const calculatedPrice = Math.round(totalCost * (1 + numericMargin / 100));
+
+                const existingProduct = await tx.product.findUnique({
+                    where: { code: upperCode }
+                });
+
+                if (existingProduct) {
+                    await tx.product.update({
+                        where: { id: existingProduct.id },
+                        data: {
+                            name: upperName,
+                            categoryId: item.categoryId,
+                            supplierId: item.supplierId || existingProduct.supplierId,
+                            cost: numericCost,
+                            otherCosts: numericOtherCosts,
+                            margin: numericMargin,
+                            price: calculatedPrice,
+                            stock: item.stock !== undefined ? Number(item.stock) : existingProduct.stock,
+                            minStock: item.minStock !== undefined ? Number(item.minStock) : existingProduct.minStock,
+                        }
+                    });
+                    updatedCount++;
+                } else {
+                    await tx.product.create({
+                        data: {
+                            code: upperCode,
+                            name: upperName,
+                            categoryId: item.categoryId,
+                            supplierId: item.supplierId || null,
+                            cost: numericCost,
+                            otherCosts: numericOtherCosts,
+                            margin: numericMargin,
+                            price: calculatedPrice,
+                            stock: Number(item.stock) || 0,
+                            minStock: Number(item.minStock) || 2,
+                            trackStock: true,
+                            taxRate: 21,
+                        }
+                    });
+                    createdCount++;
+                }
+            }
+
+            return { createdCount, updatedCount };
+        });
+
+        revalidatePath('/productos');
+        revalidatePath('/stock');
+
+        return {
+            success: true,
+            message: `Proceso finalizado: ${result.createdCount} creados, ${result.updatedCount} actualizados.`
+        };
+    } catch (error: any) {
+        console.error('Error en importación masiva de productos:', error);
+        return { error: error.message || 'Error al procesar la importación masiva.' };
+    }
+}
+
+// ==========================================
+// ACCIONES DE STOCK
+// ==========================================
+
+export async function adjustStock(productId: string, quantityChange: number, type: 'IN' | 'OUT' | 'ADJUSTMENT', notes?: string) {
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+            const product = await tx.product.findUnique({
+                where: { id: productId }
+            });
+
+            if (!product) {
+                throw new Error('Producto no encontrado.');
+            }
+
+            let newStock = product.stock;
+
+            if (type === 'IN') {
+                newStock += Math.abs(quantityChange);
+            } else if (type === 'OUT') {
+                newStock -= Math.abs(quantityChange);
+            } else if (type === 'ADJUSTMENT') {
+                newStock = quantityChange;
+            }
+
+            if (newStock < 0) {
+                throw new Error('El stock resultante no puede ser negativo.');
+            }
+
+            const updatedProduct = await tx.product.update({
+                where: { id: productId },
+                data: { stock: newStock },
+                include: {
+                    category: true,
+                    supplier: true,
+                }
+            });
+
+            await tx.stockMovement.create({
+                data: {
+                    productId,
+                    quantity: quantityChange,
+                    type,
+                    notes: notes ? notes.toUpperCase() : `AJUSTE MANUAL (${type})`,
+                    previousStock: product.stock,
+                    newStock,
+                }
+            });
+
+            return updatedProduct;
+        });
+
+        revalidatePath('/productos');
+        revalidatePath('/stock');
+
+        return { success: true, product: result };
+    } catch (error: any) {
+        console.error('Error al ajustar stock:', error);
+        return { error: error.message || 'Error al procesar el ajuste de stock.' };
+    }
+}
+
+// ==========================================
+// ACCIONES DE CATEGORÍAS
+// ==========================================
+
+export async function getCategories() {
+    try {
+        return await prisma.category.findMany({
+            orderBy: { name: 'asc' },
+        });
+    } catch (error) {
+        console.error('Error al obtener categorías:', error);
+        return [];
+    }
+}
+
+export async function createCategory(data: { name: string; defaultMargin?: number }) {
+    try {
+        if (!data.name || !data.name.trim()) {
+            return { error: 'El nombre de la categoría es obligatorio.' };
+        }
+
+        const category = await prisma.category.create({
+            data: {
+                name: data.name.trim().toUpperCase(),
+                defaultMargin: Number(data.defaultMargin) || 100,
+            },
+        });
+
+        revalidatePath('/productos');
+        return { success: true, category };
+    } catch (error: any) {
+        console.error('Error al crear categoría:', error);
+        return { error: error.message || 'Error al crear la categoría.' };
+    }
+}
+
+export async function deleteCategory(id: string) {
+    try {
+        await prisma.category.delete({ where: { id } });
         revalidatePath('/productos');
         return { success: true };
-    } catch (error) {
-        console.error('Error al eliminar producto:', error);
-        return { error: 'No se pudo eliminar el producto.' };
+    } catch (error: any) {
+        console.error('Error al eliminar categoría:', error);
+        return { error: 'No se puede eliminar una categoría que contiene productos asociados.' };
     }
 }
 
-export async function seedCategoriesAction() {
-    const baseCategories = [
-        { name: 'INTERIOR', defaultMargin: 100 },
-        { name: 'MACETAS - PLASTICAS', defaultMargin: 60 },
-        { name: 'MACETAS - CEMENTO', defaultMargin: 50 },
-        { name: 'SUSTRATOS', defaultMargin: 40 },
-        { name: 'AGROQUIMICOS - INSECTICIDAS', defaultMargin: 50 },
-        { name: 'AGROQUIMICOS - FERTILIZANTES', defaultMargin: 50 },
-        { name: 'PLANTIN', defaultMargin: 100 },
-        { name: 'ACCESORIOS', defaultMargin: 50 },
-        { name: 'DECO', defaultMargin: 50 }
-    ];
+// ==========================================
+// ACCIONES DE PROVEEDORES
+// ==========================================
 
+export async function getSuppliers() {
     try {
-        let createdCount = 0;
-        for (const cat of baseCategories) {
-            const existing = await prisma.category.findFirst({
-                where: { name: cat.name }
-            });
-            if (!existing) {
-                await prisma.category.create({ data: cat });
-                createdCount++;
-            }
-        }
-        revalidatePath('/productos');
-        return { createdCount };
+        return await prisma.supplier.findMany({
+            orderBy: { name: 'asc' },
+        });
     } catch (error) {
-        console.error('Error al poblar categorías:', error);
-        return { error: 'Error al inicializar categorías.' };
+        console.error('Error al obtener proveedores:', error);
+        return [];
     }
 }
 
-export async function importProductsBatch(rows: ImportRowData[]) {
-    const logs: ImportErrorLog[] = [];
-    let importedCount = 0;
-
+export async function createSupplier(data: { name: string; phone?: string }) {
     try {
-        const allCategories = await prisma.category.findMany();
-        const allSuppliers = await prisma.supplier.findMany();
-
-        for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            const rowNum = i + 2; // +2 por la cabecera del CSV y el índice 0
-
-            const name = row.Nombre ? String(row.Nombre).trim().toUpperCase() : '';
-            const categoryName = row.Categoria ? String(row.Categoria).trim() : '';
-            const supplierName = row.Proveedor ? String(row.Proveedor).trim().toUpperCase() : '';
-
-            if (!name) {
-                logs.push({
-                    rowNumber: rowNum,
-                    productName: 'DESCONOCIDO',
-                    category: categoryName || 'N/A',
-                    reason: 'El nombre del producto es obligatorio.'
-                });
-                continue;
-            }
-
-            // 1. VALIDAR CATEGORÍA (ESTRICMA)
-            const category = allCategories.find(c => normalizeText(c.name) === normalizeText(categoryName));
-            if (!category) {
-                logs.push({
-                    rowNumber: rowNum,
-                    productName: name,
-                    category: categoryName || 'NO ESPECIFICADA',
-                    reason: `La categoría "${categoryName}" no existe en el sistema. Debe crearse previamente para armar el código.`
-                });
-                continue;
-            }
-
-            // 2. BUSCAR O CREAR PROVEEDOR (GET OR CREATE)
-            let supplierId: string | null = null;
-            if (supplierName) {
-                let supplier = allSuppliers.find(s => normalizeText(s.name) === normalizeText(supplierName));
-                if (!supplier) {
-                    supplier = await prisma.supplier.create({
-                        data: { name: supplierName }
-                    });
-                    allSuppliers.push(supplier);
-                }
-                supplierId = supplier.id;
-            }
-
-            // 3. PARSEAR COSTOS Y CALCULAR PRECIO FINAL
-            const cost = Math.round(parseFloat(String(row.CostoBase || '0')) || 0);
-            const otherCosts = Math.round(parseFloat(String(row.OtrosCostos || '0')) || 0);
-            const totalCost = cost + otherCosts;
-
-            const margin = category.defaultMargin || 100;
-            const taxRate = 21; // Alicuota por defecto IVA 21%
-
-            let priceNoTax = 0;
-            if (margin >= 100) {
-                priceNoTax = totalCost * (1 + margin / 100);
-            } else {
-                priceNoTax = totalCost / (1 - margin / 100);
-            }
-            const price = Math.round(priceNoTax * (1 + taxRate / 100));
-
-            // 4. GENERAR CÓDIGO Y STOCK
-            const code = await generateNextProductCode(category.id);
-
-            const trackStockStr = String(row.AlertaStockBajo || 'SI').trim().toUpperCase();
-            const trackStock = trackStockStr === 'SI' || trackStockStr === 'TRUE' || trackStockStr === '1';
-            const stock = parseInt(String(row.StockInicial || '0'), 10) || 0;
-            const minStock = parseInt(String(row.StockMinimo || '2'), 10) || 2;
-
-            // 5. GUARDAR PRODUCTO
-            await prisma.product.create({
-                data: {
-                    code,
-                    name,
-                    categoryId: category.id,
-                    supplierId,
-                    cost,
-                    otherCosts,
-                    margin,
-                    taxRate,
-                    price,
-                    trackStock,
-                    stock,
-                    minStock
-                }
-            });
-
-            importedCount++;
+        if (!data.name || !data.name.trim()) {
+            return { error: 'El nombre del proveedor es obligatorio.' };
         }
 
+        const supplier = await prisma.supplier.create({
+            data: {
+                name: data.name.trim().toUpperCase(),
+                phone: data.phone ? data.phone.trim().toUpperCase() : null,
+            },
+        });
+
         revalidatePath('/productos');
-        return { success: true, importedCount, logs };
-    } catch (error) {
-        console.error('Error en importación masiva:', error);
-        return { success: false, importedCount: 0, logs };
+        revalidatePath('/compras');
+
+        return { success: true, supplier };
+    } catch (error: any) {
+        console.error('Error al crear proveedor:', error);
+        return { error: error.message || 'Error al crear el proveedor.' };
     }
 }
