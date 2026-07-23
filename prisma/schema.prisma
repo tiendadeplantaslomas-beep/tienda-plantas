@@ -28,11 +28,11 @@ model Supplier {
 }
 
 model Product {
-  id          String    @id @default(cuid())
-  code        String    @unique
+  id          String   @id @default(cuid())
+  code        String   @unique
   name        String
   categoryId  String
-  category    Category  @relation(fields: [categoryId], references: [id])
+  category    Category @relation(fields: [categoryId], references: [id])
   
   supplierId  String?
   supplier    Supplier? @relation(fields: [supplierId], references: [id])
@@ -52,6 +52,19 @@ model Product {
   updatedAt   DateTime  @updatedAt
 
   saleItems   SaleItem[]
+  movements   StockMovement[]
+}
+
+model StockMovement {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Int
+  type          String   // 'IN', 'OUT', 'ADJUSTMENT'
+  notes         String?
+  previousStock Int
+  newStock      Int
+  createdAt     DateTime @default(now())
 }
 
 model Sale {
