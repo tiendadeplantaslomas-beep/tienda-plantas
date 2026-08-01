@@ -1,62 +1,71 @@
-# 🪴 Sistema de Gestión para Vivero - Documentación Funcional y Técnica
+# # 🌿 Sistema de Gestión y E-commerce - Tienda de Plantas
 
-Este documento consolida la arquitectura, reglas de negocio y flujos operativos de los módulos desarrollados en el sistema.
-
----
-
-## 1. Módulo de Productos (`/productos`)
-
-### 🎯 Objetivo
-Gestionar el catálogo de productos, definiendo la ficha técnica de cada artículo, sus costos base, márgenes de ganancia e indicadores de inventario.
-
-### ⚙️ Reglas de Negocio
-* **Mayúsculas Automáticas:** Todo texto ingresado (código, nombre) se transforma a mayúsculas en tiempo real y antes de guardarse en la base de datos.
-* **Cálculo de Precio de Venta:** El precio final se calcula automáticamente con la fórmula:
-  $$\text{Precio Final} = \text{Math.round}\left((\text{Costo Base} + \text{Otros Costos}) \times \left(1 + \frac{\text{Margen \%}}{100}\right)\right)$$
-* **Generación de Código:** Permite la creación manual o la generación automática con formato `PRD-XXXX`.
-* **Carga Masiva:** Soporta la importación por lotes para alta y actualización masiva de artículos.
-
-### 💡 Caso de Uso Principal
-Entrar a este módulo **únicamente** para dar de alta nuevos productos, corregir descripciones o ajustar el porcentaje de margen de ganancia ($GB\%$).
+Este proyecto es una plataforma **omnicanal** desarrollada con Next.js (App Router), pensada para integrar en una sola base de datos y backend centralizado dos operaciones clave:
+1. **Tienda Online (E-commerce / B2C)**: Catálogo, carrito de compras, usuarios y ventas web.
+2. **Sistema POS / Administración Interna**: Punto de venta ágil en mostrador, arqueo de caja diario, gestión de inventario y reportes consolidados.
 
 ---
 
-## 2. Módulo de Control de Stock (`/stock`)
+## 🏗️ Arquitectura de Rutas (Route Groups)
 
-### 🎯 Objetivo
-Monitorear la disponibilidad física de mercadería en tiempo real, controlar puntos de reposición (stock mínimo) y registrar ajustes o mermas con trazabilidad completa.
+Aprovechando los **Route Groups** de Next.js, el proyecto se divide en dos entornos visuales y funcionales totalmente independientes, compartiendo las mismas Server Actions y base de datos.
 
-### ⚙️ Reglas de Negocio
-* **Estados de Stock:**
-  * **Stock Actual (`stock`):** Cantidad de unidades físicas disponibles hoy.
-  * **Stock Mínimo (`minStock`):** Umbral que activa alertas visuales de stock crítico para reposición.
-  * **Control de Stock (`trackStock`):** Interruptor booleano para habilitar/deshabilitar el descuento automático.
-* **Trazabilidad (`StockMovement`):** Todo cambio en el stock genera un registro imborrable con:
-  * Fecha y hora exacta.
-  * Tipo de movimiento: Entrada (`IN`), Salida/Merma (`OUT`), Ajuste de Inventario (`ADJUSTMENT`).
-  * Stock previo, cantidad modificada y stock resultante.
-  * Nota explicativa del movimiento.
+```text
+src/
+└── app/
+    ├── (tienda)/                   # 🛒 CANAL PÚBLICO (Clientes)
+    │   ├── layout.tsx              # Usa Navbar (Logo, Carrito, Menú móvil, etc.)
+    │   ├── page.tsx                # Home / Catálogo principal
+    │   ├── categoria/[id]/page.tsx # Filtro por categorías (Plantas, Sustratos, Macetas)
+    │   └── checkout/page.tsx       # Checkout y pago online
+    │
+    ├── (admin)/                    # 🖥️ CANAL MOSTRADOR / POS (Uso Interno)
+    │   ├── layout.tsx              # Layout compacto (Barra superior fija 45px)
+    │   ├── ventas/page.tsx         # Terminal Punto de Venta (POS Mostrador)
+    │   ├── caja/page.tsx           # Resumen y Arqueo Diario de Caja
+    │   ├── ventas/historial/       # Reportes e Informes Acumulados
+    │   └── productos/page.tsx      # ABM de Productos y Control de Stock
+    │
+    └── api/                        # Webhooks y endpoints API
 
-### 💡 Caso de Uso Principal
-Pantalla de **operación y control diario**. Se utiliza para verificar disponibilidad, registrar mermas (plantas dañadas, macetas rotas) o realizar el conteo físico de inventario.
+    🗄️ Modelo de Datos Centralizado (Prisma Schema)
+El control de stock y ventas es unificado. La diferenciación de ingresos se maneja a través del enum SalesChannel.
 
----
+🗄️ Modelo de Datos Centralizado (Prisma Schema)
+El control de stock y ventas es unificado. La diferenciación de ingresos se maneja a través del enum SalesChannel.
 
-## 3. Módulo de Ingreso de Compras (`/compras`)
+📌 Reglas de Desarrollo y Buenas Prácticas
+Prevención de Errores de Hidratación (SSR / Client):
 
-### 🎯 Objetivo
-Registrar la recepción de mercadería mediante comprobantes (Facturas, Remitos, Presupuestos), actualizando automáticamente los costos del producto y sumando existencias al stock.
+El cálculo/formateo de fechas (.toLocaleDateString(), new Date()) y números (.toLocaleString('es-AR')) debe estar controlado mediante el estado de montaje del cliente (mounted) o la directiva suppressHydrationWarning en componentes cliente.
 
-### ⚙️ Reglas de Negocio
-* **Prorrateo de Flete/Gastos Varios:** Los costos adicionales del comprobante (flete, acarreo) se dividen equitativamente entre el total de unidades físicas ingresadas:
-  $$\text{Flete por Unidad} = \text{Math.round}\left(\frac{\text{Total Gastos Varios}}{\text{Total de Unidades del Comprobante}}\right)$$
-  $$\text{Costo Final por Unidad} = \text{Costo Base} + \text{Flete por Unidad}$$
-* **Alta Rápida de Proveedores:** Permite crear proveedores en vivo desde el mismo formulario mediante un pop-over inline. Los datos de proveedores se limitan estrictamente a `Nombre` y `Teléfono` (convertidos a mayúsculas).
-* **Actualización Automática:** Al guardar el comprobante:
-  1. Se impacta el costo base y costo final en el producto.
-  2. Se suma la cantidad ingresada al `stock` del producto automáticamente.
-  3. Se genera un registro de movimiento de entrada (`IN`) en la trazabilidad de stock.
-* **Limpieza de Formulario:** Tras una carga exitosa, el sistema resetea los datos generales del comprobante y la grilla de ítems.
+Diseño e Interfaz:
 
-### 💡 Caso de Uso Principal
-Carga de comprobantes de proveedores cuando ingresa mercadería al local/vivero.
+Canal Admin (POS): Vistas compactas sin scroll global (h-[calc(100vh-45px)]), densas en información, botones grandes para cobro rápido y atajos.
+
+Canal Tienda: Interfaz orientada a la experiencia de usuario (UX), componentes adaptables (responsive) y navegación por categorías.
+
+📋 Estado del Proyecto y Hoja de Ruta
+🟢 Módulos Completados
+[x] Terminal Punto de Venta (POS): Selección de productos, métodos de pago y emisión de comprobantes.
+
+[x] Control y Arqueo de Caja: Vista de totales por medio de pago y comparación de efectivo teórico vs. físico.
+
+[x] Historial e Informes de Ventas: Filtros por rango de fechas, detalle de operaciones y corrección de hidratación.
+
+[x] Navegación Unificada Admin: Integración entre Ventas, Caja y Reportes mediante barra superior fija (45px).
+
+[x] Componente Header / Navbar Tienda: Estructura inicial para el canal público con carrito y perfil.
+
+[x] Arquitectura Base de Rutas: Definición del esquema (tienda) y (admin).
+
+🟡 En Progreso / Siguientes Pasos
+[ ] Estructura de Carpetas: Reorganizar físicamente las rutas actuales en (admin) y (tienda).
+
+[ ] Canal Enum en Ventas: Incorporar la propiedad channel (MOSTRADOR / ONLINE) al registrar ventas y en los reportes.
+
+[ ] ABM de Productos y Stock: Pantalla de gestión de productos para actualizar precios y stock centralizado.
+
+[ ] Carrito y Checkout E-commerce: Lógica de carrito persistente y flujo de compra para el cliente online.
+
+[ ] Autenticación & Roles: Distinguir entre usuarios/clientes web y administradores/cajeros.

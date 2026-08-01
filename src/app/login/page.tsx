@@ -17,10 +17,12 @@ export default function LoginPage() {
         // LÓGICA DE ROLES
         if (email === 'admin@vivero.com' && password === 'admin123') {
             localStorage.setItem('user_role', 'ADMIN');
-            router.push('/admin');
+            // Cambiamos '/admin' por '/dashboard' (donde movimos tu page.tsx)
+            router.push('/dashboard');
         } else if (email === 'cliente@vivero.com' && password === 'user123') {
             localStorage.setItem('user_role', 'CLIENTE');
-            router.push('/tienda');
+            // Cambiamos '/tienda' por '/' (la raíz pública)
+            router.push('/');
         } else {
             setError('Credenciales incorrectas. Probá con admin@vivero.com / admin123 o cliente@vivero.com / user123');
         }

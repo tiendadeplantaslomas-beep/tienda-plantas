@@ -7,6 +7,25 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// -------------------------------------------------------------
+// ENUMS (OMNICANALIDAD Y MEDIOS DE PAGO)
+// -------------------------------------------------------------
+enum SalesChannel {
+  MOSTRADOR // Venta en local físico / POS
+  ONLINE    // Venta a través del e-commerce
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TRANSFERENCIA
+  DEBITO
+  CREDITO
+  MERCADOPAGO
+}
+
+// -------------------------------------------------------------
+// CATEGORÍAS Y PROVEEDORES
+// -------------------------------------------------------------
 model Category {
   id            String    @id @default(cuid())
   name          String    @unique
@@ -28,10 +47,16 @@ model Supplier {
   updatedAt DateTime   @updatedAt
 }
 
+// -------------------------------------------------------------
+// PRODUCTOS E INVENTARIO
+// -------------------------------------------------------------
 model Product {
   id          String         @id @default(cuid())
   code        String         @unique
   name        String
+  description String?        @db.Text // Descripción extendida para la Tienda Online
+  imageUrl    String?        // Imagen principal para el e-commerce
+  
   categoryId  String
   category    Category       @relation(fields: [categoryId], references: [id])
   
@@ -62,7 +87,7 @@ model StockMovement {
   productId     String
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   quantity      Int
-  type          String   // 'IN', 'OUT', 'ADJUSTMENT', 'PURCHASE'
+  type          String   // 'IN', 'OUT', 'ADJUSTMENT', 'PURCHASE', 'SALE_ONLINE', 'SALE_MOSTRADOR'
   notes         String?
   previousStock Int
   newStock      Int
@@ -106,21 +131,44 @@ model PurchaseItem {
 }
 
 // -------------------------------------------------------------
-// VENTAS Y DETALLE
+// VENTAS Y DETALLE (OMNICANAL)
 // -------------------------------------------------------------
 model Sale {
-  id        String     @id @default(cuid())
-  total     Int
-  createdAt DateTime   @default(now())
-  items     SaleItem[]
+  id            String        @id @default(cuid())
+  channel       SalesChannel  @default(MOSTRADOR) // MOSTRADOR u ONLINE
+  paymentMethod PaymentMethod @default(EFECTIVO)
+  total         Int
+  customerName  String?
+  notes         String?
+  
+  // Relación opcional con cliente registrado en la web/local
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id])
+
+  createdAt     DateTime      @default(now())
+  items         SaleItem[]
 }
 
 model SaleItem {
   id        String   @id @default(cuid())
   saleId    String
-  sale      Sale     @relation(fields: [saleId], references: [id])
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   productId String
   product   Product  @relation(fields: [productId], references: [id])
   quantity  Int
   price     Int
+}
+
+// -------------------------------------------------------------
+// CLIENTES (REGISTRO WEB Y LOCAL)
+// -------------------------------------------------------------
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  @unique
+  phone     String?
+  address   String?
+  sales     Sale[]   // Historial de compras del cliente
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
