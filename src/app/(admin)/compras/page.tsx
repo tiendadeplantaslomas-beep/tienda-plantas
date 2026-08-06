@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import { getProducts, createSupplier } from '@/actions/product-actions';
 import { createPurchase, getSuppliersForSelect, getCategoriesForSelect, PurchaseItemInput } from '@/actions/purchase-actions';
 
@@ -28,6 +29,7 @@ type SortField = 'code' | 'name' | null;
 type SortOrder = 'asc' | 'desc';
 
 export default function PurchasesPage() {
+    const [fechaActual, setFechaActual] = useState('');
     const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
     const [categories, setCategories] = useState<CategoryOption[]>([]);
     const [existingProducts, setExistingProducts] = useState<ProductSelectOption[]>([]);
@@ -82,6 +84,16 @@ export default function PurchasesPage() {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
+        const hoy = new Date();
+        const opciones: Intl.DateTimeFormatOptions = {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        };
+        const fechaStr = hoy.toLocaleDateString('es-AR', opciones);
+        setFechaActual(fechaStr.charAt(0).toUpperCase() + fechaStr.slice(1));
+
         loadData();
     }, []);
 
@@ -404,513 +416,537 @@ export default function PurchasesPage() {
     }
 
     return (
-        <div className="p-2.5 md:p-4 max-w-7xl mx-auto space-y-2.5 text-slate-800">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 max-w-7xl mx-auto text-slate-800 pb-1 items-stretch">
+            <div className="lg:col-span-12 flex flex-col gap-2">
 
-            {/* ENCABEZADO COMPACTO */}
-            <div className="flex justify-between items-center border-b pb-1.5 border-slate-200">
-                <div>
-                    <h1 className="text-base font-bold text-slate-800">Ingreso de Compras y Recepción</h1>
-                    <p className="text-[10px] text-slate-500">Comprobantes, prorrateo de flete y actualización de costos de stock.</p>
+                {/* ENCABEZADO Y ACCIONES */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center px-0.5 gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5">
+
+                        <div>
+                            <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+                                <span>📦</span> Ingreso de Compras y Recepción
+                            </h1>
+                            <p className="text-[9px] text-slate-500 font-medium">
+                                Comprobantes, prorrateo de flete y actualización de costos de stock[cite: 2]. &bull; {fechaActual}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                        <Link
+                            href="/productos"
+                            className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-[10px] font-semibold rounded shadow-2xs flex items-center gap-1 transition-colors"
+                        >
+                            <span>🏷️</span> Ir a Catálogo
+                        </Link>
+                    </div>
                 </div>
-            </div>
 
-            {/* ALERTAS CON AUTO-HIDE */}
-            {message && (
-                <div className={`p-1.5 rounded-lg text-xs font-medium flex justify-between items-center transition-all duration-300 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
-                    <span>{message.text}</span>
-                    <button onClick={() => setMessage(null)} className="font-bold text-slate-400 hover:text-slate-600 ml-2">✕</button>
-                </div>
-            )}
+                {/* ALERTAS CON AUTO-HIDE */}
+                {message && (
+                    <div className={`p-2.5 rounded-md text-[11px] font-medium flex justify-between items-center transition-all ${message.type === 'success'
+                        ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 shadow-2xs'
+                        : 'bg-rose-50 text-rose-900 border border-rose-300 shadow-2xs'
+                        }`}>
+                        <div className="flex items-center gap-2">
+                            <span>{message.type === 'success' ? '✅' : '⚠️'}</span>
+                            <span className="font-semibold">{message.text}</span>
+                        </div>
+                        <button type="button" onClick={() => setMessage(null)} className="font-bold text-slate-500 hover:text-slate-800 px-1">✕</button>
+                    </div>
+                )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 items-start">
 
-                {/* COLUMNA IZQUIERDA: FORMULARIOS COMPACTOS */}
-                <div className="space-y-2.5">
+                    {/* COLUMNA IZQUIERDA: FORMULARIOS COMPACTOS */}
+                    <div className="space-y-2">
 
-                    {/* DATOS DEL COMPROBANTE */}
-                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
-                        <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide border-b pb-1">
-                            Datos del Comprobante
-                        </h2>
+                        {/* DATOS DEL COMPROBANTE */}
+                        <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
+                            <h2 className="text-[10px] font-bold text-slate-800 uppercase tracking-wide border-b pb-1">
+                                Datos del Comprobante
+                            </h2>
 
-                        <div className="space-y-1.5">
-                            {/* PROVEEDOR PREDICTIVO + POPOVER INLINE */}
-                            <div className="relative" ref={supplierDropdownRef}>
-                                <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">
-                                    Proveedor <span className="text-rose-500">*</span>
-                                </label>
-                                <div className="flex gap-1">
-                                    <div className="relative w-full">
+                            <div className="space-y-1">
+                                {/* PROVEEDOR PREDICTIVO + POPOVER INLINE */}
+                                <div className="relative" ref={supplierDropdownRef}>
+                                    <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">
+                                        Proveedor <span className="text-rose-500">*</span>
+                                    </label>
+                                    <div className="flex gap-1">
+                                        <div className="relative w-full">
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar o seleccionar proveedor..."
+                                                value={supplierSearchQuery}
+                                                onKeyDown={handleSupplierKeyDown}
+                                                onChange={(e) => {
+                                                    setSupplierSearchQuery(e.target.value);
+                                                    if (selectedSupplierId) setSelectedSupplierId('');
+                                                    setIsSupplierDropdownOpen(true);
+                                                    setFocusedSupplierIndex(0);
+                                                }}
+                                                onFocus={() => {
+                                                    setIsSupplierDropdownOpen(true);
+                                                    setFocusedSupplierIndex(0);
+                                                }}
+                                                className="w-full border border-slate-300 rounded-md p-1 pr-6 text-xs font-medium uppercase bg-white focus:ring-1 focus:ring-slate-800"
+                                            />
+                                            {supplierSearchQuery && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleClearSupplierSelection}
+                                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                                                >
+                                                    ✕
+                                                </button>
+                                            )}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowInlineSupplier(!showInlineSupplier)}
+                                            className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-2 py-1 rounded-md text-xs shadow"
+                                            title="Agregar nuevo proveedor"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
+
+                                    {/* LISTA DESPLEGABLE FILTRADA DE PROVEEDORES */}
+                                    {isSupplierDropdownOpen && (
+                                        <div className="absolute left-0 right-8 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-40 overflow-y-auto z-50 divide-y divide-slate-100">
+                                            {/* Opción para crear rápido */}
+                                            <div
+                                                ref={(el) => { supplierItemRefs.current[0] = el; }}
+                                                onClick={() => {
+                                                    setShowInlineSupplier(true);
+                                                    setIsSupplierDropdownOpen(false);
+                                                }}
+                                                onMouseEnter={() => setFocusedSupplierIndex(0)}
+                                                className={`p-1.5 text-xs font-bold cursor-pointer transition-colors ${focusedSupplierIndex === 0 ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-50'}`}
+                                            >
+                                                + NUEVO PROVEEDOR...
+                                            </div>
+
+                                            {filteredSuppliers.length === 0 ? (
+                                                <div className="p-1.5 text-xs text-slate-400 italic text-center">
+                                                    No se encontraron proveedores
+                                                </div>
+                                            ) : (
+                                                filteredSuppliers.map((s, index) => {
+                                                    const actualIndex = index + 1;
+                                                    const isFocused = actualIndex === focusedSupplierIndex;
+                                                    return (
+                                                        <div
+                                                            key={s.id}
+                                                            ref={(el) => { supplierItemRefs.current[actualIndex] = el; }}
+                                                            onClick={() => handleSelectSupplier(s)}
+                                                            onMouseEnter={() => setFocusedSupplierIndex(actualIndex)}
+                                                            className={`p-1.5 text-xs cursor-pointer uppercase transition-colors ${isFocused ? 'bg-slate-800 text-white font-bold' : 'hover:bg-slate-100 text-slate-800'}`}
+                                                        >
+                                                            {s.name}
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* POPOVER NUEVO PROVEEDOR */}
+                                    {showInlineSupplier && (
+                                        <div className="absolute top-10 left-0 z-50 bg-slate-800 p-2 rounded-xl shadow-xl border border-slate-700 w-full text-white space-y-1">
+                                            <h3 className="text-[9px] font-bold uppercase tracking-wider text-slate-300">Nuevo Proveedor</h3>
+                                            <input
+                                                type="text"
+                                                placeholder="Nombre..."
+                                                value={newSupplierName}
+                                                onChange={(e) => setNewSupplierName(e.target.value.toUpperCase())}
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-md p-1 text-xs text-white placeholder-slate-500 uppercase"
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="Teléfono..."
+                                                value={newSupplierPhone}
+                                                onChange={(e) => setNewSupplierPhone(e.target.value.toUpperCase())}
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-md p-1 text-xs text-white placeholder-slate-500 uppercase"
+                                            />
+                                            <div className="flex justify-end gap-1 pt-0.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowInlineSupplier(false)}
+                                                    className="bg-slate-700 hover:bg-slate-600 text-[9px] px-2 py-0.5 rounded text-slate-200 font-bold"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCreateSupplierInline}
+                                                    disabled={isSavingSupplier || !newSupplierName.trim()}
+                                                    className="bg-emerald-600 hover:bg-emerald-500 text-[9px] px-2 py-0.5 rounded text-white font-bold disabled:opacity-50"
+                                                >
+                                                    {isSavingSupplier ? 'Guardando...' : 'Guardar'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-1">
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Tipo</label>
+                                        <select
+                                            value={docType}
+                                            onChange={(e) => setDocType(e.target.value as any)}
+                                            className="w-full border border-slate-300 rounded-md p-1 text-xs font-bold bg-white focus:ring-1 focus:ring-slate-800"
+                                        >
+                                            <option value="FACTURA">📄 FACTURA</option>
+                                            <option value="REMITO">📦 REMITO</option>
+                                            <option value="PRESUPUESTO">📝 PRESUPUESTO</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">N° Comprobante</label>
                                         <input
                                             type="text"
-                                            placeholder="Buscar o seleccionar proveedor..."
-                                            value={supplierSearchQuery}
-                                            onKeyDown={handleSupplierKeyDown}
+                                            placeholder="0001-00004582"
+                                            value={docNumber}
+                                            onChange={(e) => setDocNumber(e.target.value.toUpperCase())}
+                                            className="w-full border border-slate-300 rounded-md p-1 text-xs uppercase focus:ring-1 focus:ring-slate-800 font-mono"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Fecha Emisión</label>
+                                    <input
+                                        type="date"
+                                        value={purchaseDate}
+                                        onChange={(e) => setPurchaseDate(e.target.value)}
+                                        className="w-full border border-slate-300 rounded-md p-1 text-xs focus:ring-1 focus:ring-slate-800"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* AÑADIR PRODUCTO (COMPACTO) */}
+                        <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
+                            <div className="flex justify-between items-center border-b pb-1">
+                                <h2 className="text-[10px] font-bold text-slate-800 uppercase tracking-wide">
+                                    Añadir Producto
+                                </h2>
+                                {selectedProductId && (
+                                    <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
+                                        Catálogo
+                                    </span>
+                                )}
+                            </div>
+
+                            <form onSubmit={handleAddItem} className="space-y-1">
+
+                                {/* BUSCADOR PREDICTIVO CON NAVEGACIÓN POR TECLADO */}
+                                <div className="relative" ref={dropdownRef}>
+                                    <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">
+                                        Buscar en Catálogo <span className="text-slate-400 font-normal lowercase">(o crear abajo)</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            placeholder="Escribí código o nombre..."
+                                            value={searchQuery}
+                                            onKeyDown={handleKeyDown}
                                             onChange={(e) => {
-                                                setSupplierSearchQuery(e.target.value);
-                                                if (selectedSupplierId) setSelectedSupplierId('');
-                                                setIsSupplierDropdownOpen(true);
-                                                setFocusedSupplierIndex(0);
+                                                setSearchQuery(e.target.value);
+                                                if (selectedProductId) setSelectedProductId('');
+                                                setIsDropdownOpen(true);
+                                                setFocusedIndex(0);
                                             }}
                                             onFocus={() => {
-                                                setIsSupplierDropdownOpen(true);
-                                                setFocusedSupplierIndex(0);
+                                                setIsDropdownOpen(true);
+                                                setFocusedIndex(0);
                                             }}
-                                            className="w-full border border-slate-300 rounded-md p-1 pr-6 text-xs font-medium uppercase bg-white focus:ring-1 focus:ring-slate-800"
+                                            className="w-full border border-slate-300 rounded-md p-1 pr-6 text-xs font-medium bg-white focus:ring-1 focus:ring-slate-800"
                                         />
-                                        {supplierSearchQuery && (
+                                        {searchQuery && (
                                             <button
                                                 type="button"
-                                                onClick={handleClearSupplierSelection}
+                                                onClick={handleClearProductSelection}
                                                 className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
                                             >
                                                 ✕
                                             </button>
                                         )}
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowInlineSupplier(!showInlineSupplier)}
-                                        className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-2 py-1 rounded-md text-xs shadow"
-                                        title="Agregar nuevo proveedor"
-                                    >
-                                        +
-                                    </button>
-                                </div>
 
-                                {/* LISTA DESPLEGABLE FILTRADA DE PROVEEDORES */}
-                                {isSupplierDropdownOpen && (
-                                    <div className="absolute left-0 right-8 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-44 overflow-y-auto z-50 divide-y divide-slate-100">
-                                        {/* Opción para crear rápido */}
-                                        <div
-                                            ref={(el) => (supplierItemRefs.current[0] = el)}
-                                            onClick={() => {
-                                                setShowInlineSupplier(true);
-                                                setIsSupplierDropdownOpen(false);
-                                            }}
-                                            onMouseEnter={() => setFocusedSupplierIndex(0)}
-                                            className={`p-1.5 text-xs font-bold cursor-pointer transition-colors ${focusedSupplierIndex === 0 ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-50'}`}
-                                        >
-                                            + NUEVO PROVEEDOR...
+                                    {/* LISTA DESPLEGABLE FILTRADA */}
+                                    {isDropdownOpen && (
+                                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-36 overflow-y-auto z-50 divide-y divide-slate-100">
+                                            {filteredSearchProducts.length === 0 ? (
+                                                <div className="p-1.5 text-xs text-slate-400 italic text-center">
+                                                    No se encontraron productos
+                                                </div>
+                                            ) : (
+                                                filteredSearchProducts.map((p, index) => {
+                                                    const isFocused = index === focusedIndex;
+                                                    return (
+                                                        <div
+                                                            key={p.id}
+                                                            ref={(el) => { itemRefs.current[index] = el; }}
+                                                            onClick={() => handleSelectProduct(p)}
+                                                            onMouseEnter={() => setFocusedIndex(index)}
+                                                            className={`p-1.5 text-xs cursor-pointer flex justify-between items-center transition-colors ${isFocused ? 'bg-slate-800 text-white' : 'hover:bg-slate-100 text-slate-800'}`}
+                                                        >
+                                                            <div>
+                                                                <span className={`font-mono font-bold ${isFocused ? 'text-slate-200' : 'text-slate-600'}`}>[{p.code}]</span>{' '}
+                                                                <span className="font-medium">{p.name}</span>
+                                                            </div>
+                                                            <span className={`text-[10px] font-mono ${isFocused ? 'text-emerald-300 font-bold' : 'text-emerald-700'}`}>
+                                                                $ {p.cost.toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
                                         </div>
-
-                                        {filteredSuppliers.length === 0 ? (
-                                            <div className="p-1.5 text-xs text-slate-400 italic text-center">
-                                                No se encontraron proveedores
-                                            </div>
-                                        ) : (
-                                            filteredSuppliers.map((s, index) => {
-                                                const actualIndex = index + 1;
-                                                const isFocused = actualIndex === focusedSupplierIndex;
-                                                return (
-                                                    <div
-                                                        key={s.id}
-                                                        ref={(el) => (supplierItemRefs.current[actualIndex] = el)}
-                                                        onClick={() => handleSelectSupplier(s)}
-                                                        onMouseEnter={() => setFocusedSupplierIndex(actualIndex)}
-                                                        className={`p-1.5 text-xs cursor-pointer uppercase transition-colors ${isFocused ? 'bg-slate-800 text-white font-bold' : 'hover:bg-slate-100 text-slate-800'}`}
-                                                    >
-                                                        {s.name}
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* POPOVER NUEVO PROVEEDOR */}
-                                {showInlineSupplier && (
-                                    <div className="absolute top-10 left-0 z-50 bg-slate-800 p-2.5 rounded-xl shadow-xl border border-slate-700 w-full text-white space-y-1.5">
-                                        <h3 className="text-[9px] font-bold uppercase tracking-wider text-slate-300">Nuevo Proveedor</h3>
-                                        <input
-                                            type="text"
-                                            placeholder="Nombre..."
-                                            value={newSupplierName}
-                                            onChange={(e) => setNewSupplierName(e.target.value.toUpperCase())}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-md p-1 text-xs text-white placeholder-slate-500 uppercase"
-                                        />
-                                        <input
-                                            type="text"
-                                            placeholder="Teléfono..."
-                                            value={newSupplierPhone}
-                                            onChange={(e) => setNewSupplierPhone(e.target.value.toUpperCase())}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-md p-1 text-xs text-white placeholder-slate-500 uppercase"
-                                        />
-                                        <div className="flex justify-end gap-1 pt-0.5">
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowInlineSupplier(false)}
-                                                className="bg-slate-700 hover:bg-slate-600 text-[9px] px-2 py-0.5 rounded text-slate-200 font-bold"
-                                            >
-                                                Cancelar
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleCreateSupplierInline}
-                                                disabled={isSavingSupplier || !newSupplierName.trim()}
-                                                className="bg-emerald-600 hover:bg-emerald-500 text-[9px] px-2 py-0.5 rounded text-white font-bold disabled:opacity-50"
-                                            >
-                                                {isSavingSupplier ? 'Guardando...' : 'Guardar'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-1.5">
-                                <div>
-                                    <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Tipo</label>
-                                    <select
-                                        value={docType}
-                                        onChange={(e) => setDocType(e.target.value as any)}
-                                        className="w-full border border-slate-300 rounded-md p-1 text-xs font-bold bg-white focus:ring-1 focus:ring-slate-800"
-                                    >
-                                        <option value="FACTURA">📄 FACTURA</option>
-                                        <option value="REMITO">📦 REMITO</option>
-                                        <option value="PRESUPUESTO">📝 PRESUPUESTO</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">N° Comprobante</label>
-                                    <input
-                                        type="text"
-                                        placeholder="0001-00004582"
-                                        value={docNumber}
-                                        onChange={(e) => setDocNumber(e.target.value.toUpperCase())}
-                                        className="w-full border border-slate-300 rounded-md p-1 text-xs uppercase focus:ring-1 focus:ring-slate-800 font-mono"
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Fecha Emisión</label>
-                                <input
-                                    type="date"
-                                    value={purchaseDate}
-                                    onChange={(e) => setPurchaseDate(e.target.value)}
-                                    className="w-full border border-slate-300 rounded-md p-1 text-xs focus:ring-1 focus:ring-slate-800"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* AÑADIR PRODUCTO (COMPACTO) */}
-                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
-                        <div className="flex justify-between items-center border-b pb-1">
-                            <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">
-                                Añadir Producto
-                            </h2>
-                            {selectedProductId && (
-                                <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
-                                    Catálogo
-                                </span>
-                            )}
-                        </div>
-
-                        <form onSubmit={handleAddItem} className="space-y-1.5">
-
-                            {/* BUSCADOR PREDICTIVO CON NAVEGACIÓN POR TECLADO */}
-                            <div className="relative" ref={dropdownRef}>
-                                <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">
-                                    Buscar en Catálogo <span className="text-slate-400 font-normal lowercase">(o crear abajo)</span>
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        placeholder="Escribí código o nombre..."
-                                        value={searchQuery}
-                                        onKeyDown={handleKeyDown}
-                                        onChange={(e) => {
-                                            setSearchQuery(e.target.value);
-                                            if (selectedProductId) setSelectedProductId('');
-                                            setIsDropdownOpen(true);
-                                            setFocusedIndex(0);
-                                        }}
-                                        onFocus={() => {
-                                            setIsDropdownOpen(true);
-                                            setFocusedIndex(0);
-                                        }}
-                                        className="w-full border border-slate-300 rounded-md p-1 pr-6 text-xs font-medium bg-white focus:ring-1 focus:ring-slate-800"
-                                    />
-                                    {searchQuery && (
-                                        <button
-                                            type="button"
-                                            onClick={handleClearProductSelection}
-                                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
-                                        >
-                                            ✕
-                                        </button>
                                     )}
                                 </div>
 
-                                {/* LISTA DESPLEGABLE FILTRADA */}
-                                {isDropdownOpen && (
-                                    <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-40 overflow-y-auto z-50 divide-y divide-slate-100">
-                                        {filteredSearchProducts.length === 0 ? (
-                                            <div className="p-1.5 text-xs text-slate-400 italic text-center">
-                                                No se encontraron productos
-                                            </div>
-                                        ) : (
-                                            filteredSearchProducts.map((p, index) => {
-                                                const isFocused = index === focusedIndex;
-                                                return (
-                                                    <div
-                                                        key={p.id}
-                                                        ref={(el) => (itemRefs.current[index] = el)}
-                                                        onClick={() => handleSelectProduct(p)}
-                                                        onMouseEnter={() => setFocusedIndex(index)}
-                                                        className={`p-1.5 text-xs cursor-pointer flex justify-between items-center transition-colors ${isFocused ? 'bg-slate-800 text-white' : 'hover:bg-slate-100 text-slate-800'}`}
-                                                    >
-                                                        <div>
-                                                            <span className={`font-mono font-bold ${isFocused ? 'text-slate-200' : 'text-slate-600'}`}>[{p.code}]</span>{' '}
-                                                            <span className="font-medium">{p.name}</span>
-                                                        </div>
-                                                        <span className={`text-[10px] font-mono ${isFocused ? 'text-emerald-300 font-bold' : 'text-emerald-700'}`}>
-                                                            $ {p.cost.toLocaleString()}
-                                                        </span>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
+                                <div className="grid grid-cols-2 gap-1">
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Código <span className="text-rose-500">*</span></label>
+                                        <input
+                                            type="text"
+                                            placeholder="COD"
+                                            value={itemCode}
+                                            onChange={(e) => setItemCode(e.target.value.toUpperCase())}
+                                            className="w-full border border-slate-300 rounded-md p-1 text-xs font-mono font-bold uppercase focus:ring-1 focus:ring-slate-800"
+                                        />
                                     </div>
-                                )}
-                            </div>
 
-                            <div className="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Cantidad <span className="text-rose-500">*</span></label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            placeholder="0"
+                                            value={itemQty}
+                                            onChange={(e) => setItemQty(e.target.value === '' ? '' : Number(e.target.value))}
+                                            className="w-full border border-slate-300 rounded-md p-1 text-xs font-bold focus:ring-1 focus:ring-slate-800"
+                                        />
+                                    </div>
+                                </div>
+
                                 <div>
-                                    <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Código <span className="text-rose-500">*</span></label>
+                                    <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Descripción <span className="text-rose-500">*</span></label>
                                     <input
                                         type="text"
-                                        placeholder="COD"
-                                        value={itemCode}
-                                        onChange={(e) => setItemCode(e.target.value.toUpperCase())}
-                                        className="w-full border border-slate-300 rounded-md p-1 text-xs font-mono font-bold uppercase focus:ring-1 focus:ring-slate-800"
+                                        placeholder="Nombre del producto..."
+                                        value={itemName}
+                                        onChange={(e) => setItemName(e.target.value.toUpperCase())}
+                                        className="w-full border border-slate-300 rounded-md p-1 text-xs uppercase focus:ring-1 focus:ring-slate-800"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Cantidad <span className="text-rose-500">*</span></label>
+                                    <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Costo Unitario ($) <span className="text-rose-500">*</span></label>
                                     <input
                                         type="number"
-                                        min="1"
-                                        placeholder="0"
-                                        value={itemQty}
-                                        onChange={(e) => setItemQty(e.target.value === '' ? '' : Number(e.target.value))}
-                                        className="w-full border border-slate-300 rounded-md p-1 text-xs font-bold focus:ring-1 focus:ring-slate-800"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="$ 0"
+                                        value={itemCost}
+                                        onChange={(e) => setItemCost(e.target.value === '' ? '' : Number(e.target.value))}
+                                        className="w-full border border-slate-300 rounded-md p-1 text-xs font-bold font-mono text-emerald-800 focus:ring-1 focus:ring-slate-800"
                                     />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Descripción <span className="text-rose-500">*</span></label>
-                                <input
-                                    type="text"
-                                    placeholder="Nombre del producto..."
-                                    value={itemName}
-                                    onChange={(e) => setItemName(e.target.value.toUpperCase())}
-                                    className="w-full border border-slate-300 rounded-md p-1 text-xs uppercase focus:ring-1 focus:ring-slate-800"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Costo Unitario ($) <span className="text-rose-500">*</span></label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="$ 0"
-                                    value={itemCost}
-                                    onChange={(e) => setItemCost(e.target.value === '' ? '' : Number(e.target.value))}
-                                    className="w-full border border-slate-300 rounded-md p-1 text-xs font-bold font-mono text-emerald-800 focus:ring-1 focus:ring-slate-800"
-                                />
-                            </div>
-
-                            <button
-                                type="submit"
-                                className="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-md text-xs font-bold shadow transition-all mt-1"
-                            >
-                                ➕ Agregar Ítem a la Lista
-                            </button>
-                        </form>
-                    </div>
-
-                </div>
-
-                {/* COLUMNA DERECHA: TABLA ORDENABLE CON PAGINADOR Y TOTALES */}
-                <div className="lg:col-span-2 space-y-2.5">
-
-                    {/* DETALLE Y TABLA */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between">
-                        <div>
-                            <div className="p-2 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                                <span className="text-xs font-bold text-slate-700 uppercase">Detalle de Comprobante</span>
-                                <span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full">{items.length} ítems</span>
-                            </div>
-
-                            <div className="overflow-x-auto min-h-[180px]">
-                                <table className="w-full text-left text-xs border-collapse">
-                                    <thead className="bg-slate-100 text-[9px] uppercase text-slate-600 font-bold border-b border-slate-200 select-none">
-                                        <tr>
-                                            {/* COLUMNA CÓDIGO CON ORDENAMIENTO */}
-                                            <th
-                                                onClick={() => handleSort('code')}
-                                                className="p-1.5 cursor-pointer hover:bg-slate-200 transition-colors"
-                                            >
-                                                <div className="flex items-center gap-1">
-                                                    <span>Código</span>
-                                                    <span className="text-[10px]">
-                                                        {sortField === 'code' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
-                                                    </span>
-                                                </div>
-                                            </th>
-
-                                            {/* COLUMNA PRODUCTO CON ORDENAMIENTO */}
-                                            <th
-                                                onClick={() => handleSort('name')}
-                                                className="p-1.5 cursor-pointer hover:bg-slate-200 transition-colors"
-                                            >
-                                                <div className="flex items-center gap-1">
-                                                    <span>Producto</span>
-                                                    <span className="text-[10px]">
-                                                        {sortField === 'name' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
-                                                    </span>
-                                                </div>
-                                            </th>
-
-                                            <th className="p-1.5 text-center">Cant.</th>
-                                            <th className="p-1.5 text-right">Costo Unit.</th>
-                                            <th className="p-1.5 text-right">Flete/u.</th>
-                                            <th className="p-1.5 text-right">Costo Final</th>
-                                            <th className="p-1.5 text-right">Subtotal</th>
-                                            <th className="p-1.5 text-center"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 font-medium">
-                                        {paginatedItems.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={8} className="text-center py-6 text-slate-400 italic">No hay productos agregados al comprobante.</td>
-                                            </tr>
-                                        ) : (
-                                            paginatedItems.map(({ item, originalIndex }) => {
-                                                const finalUnit = item.unitCost + fletePerUnit;
-                                                return (
-                                                    <tr key={originalIndex} className="hover:bg-slate-50">
-                                                        <td className="p-1.5 font-mono font-bold text-slate-700">{item.code}</td>
-                                                        <td className="p-1.5 font-bold text-slate-800">{item.name}</td>
-                                                        <td className="p-1.5 text-center font-bold">{item.quantity} u.</td>
-                                                        <td className="p-1.5 text-right font-mono">$ {item.unitCost.toLocaleString()}</td>
-                                                        <td className="p-1.5 text-right font-mono text-amber-700">+ $ {fletePerUnit.toLocaleString()}</td>
-                                                        <td className="p-1.5 text-right font-mono font-bold text-emerald-800">$ {finalUnit.toLocaleString()}</td>
-                                                        <td className="p-1.5 text-right font-mono font-bold">$ {(item.quantity * item.unitCost).toLocaleString()}</td>
-                                                        <td className="p-1.5 text-center">
-                                                            <button
-                                                                onClick={() => handleRemoveItem(originalIndex)}
-                                                                className="text-slate-400 hover:text-rose-600 font-bold px-1"
-                                                                title="Quitar ítem"
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* PAGINADOR AL PIE DE LA TABLA */}
-                        {items.length > 0 && (
-                            <div className="p-1.5 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-[10px] text-slate-600">
-                                <div className="flex items-center gap-1.5">
-                                    <span>Mostrar:</span>
-                                    <select
-                                        value={itemsPerPage}
-                                        onChange={(e) => {
-                                            setItemsPerPage(Number(e.target.value));
-                                            setCurrentPage(1);
-                                        }}
-                                        className="border border-slate-300 rounded px-1 py-0.5 bg-white text-[10px] font-bold"
-                                    >
-                                        <option value={5}>5</option>
-                                        <option value={10}>10</option>
-                                        <option value={20}>20</option>
-                                    </select>
-                                    <span>de {items.length} ítems</span>
-                                </div>
-
-                                <div className="flex items-center gap-1 font-bold">
-                                    <button
-                                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                                        disabled={currentPage === 1}
-                                        className="px-2 py-0.5 border border-slate-300 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white"
-                                    >
-                                        ◀
-                                    </button>
-                                    <span className="px-1.5">
-                                        Pág. {currentPage} / {totalPages}
-                                    </span>
-                                    <button
-                                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                                        disabled={currentPage === totalPages}
-                                        className="px-2 py-0.5 border border-slate-300 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white"
-                                    >
-                                        ▶
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* TARJETA DE RESUMEN Y TOTALES COMPACTA */}
-                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-center">
-
-                            {/* Gastos / Flete */}
-                            <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 space-y-0.5">
-                                <label className="block text-[9px] font-bold uppercase text-slate-600">
-                                    Flete / Gastos Varios ($)
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="$ 0"
-                                    value={otherCostsTotal}
-                                    onChange={(e) => setOtherCostsTotal(e.target.value === '' ? '' : Number(e.target.value))}
-                                    className="w-full border border-slate-300 bg-white rounded-md p-1 text-xs font-bold text-amber-700 font-mono focus:ring-1 focus:ring-slate-800"
-                                />
-                                {totalUnits > 0 && otherCostsTotal !== '' && (
-                                    <p className="text-[9px] text-slate-500 pt-0.5">
-                                        Prorrateo: <strong className="text-amber-700 font-mono">+ $ {fletePerUnit.toLocaleString()}</strong> por unidad ({totalUnits} u. en total)
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Totales y Acción */}
-                            <div className="flex flex-col justify-between space-y-1.5 text-right">
-                                <div>
-                                    <span className="text-[9px] uppercase font-bold text-slate-400 block">Total Comprobante</span>
-                                    <span className="text-lg font-bold font-mono text-emerald-700">$ {totalFinal.toLocaleString()}</span>
                                 </div>
 
                                 <button
-                                    onClick={handleSubmitPurchase}
-                                    disabled={loading || items.length === 0}
-                                    className="w-full py-1.5 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white rounded-md text-xs font-bold shadow transition-all"
+                                    type="submit"
+                                    className="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-md text-xs font-bold shadow transition-all mt-1"
                                 >
-                                    {loading ? 'Guardando Comprobante...' : '💾 Registrar Comprobante'}
+                                    ➕ Agregar Ítem a la Lista
                                 </button>
+                            </form>
+                        </div>
+
+                    </div>
+
+                    {/* COLUMNA DERECHA: TABLA ORDENABLE CON PAGINADOR Y TOTALES */}
+                    <div className="lg:col-span-2 space-y-2">
+
+                        {/* DETALLE Y TABLA */}
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between">
+                            <div>
+                                <div className="p-1.5 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                                    <span className="text-xs font-bold text-slate-700 uppercase">Detalle de Comprobante</span>
+                                    <span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full">{items.length} ítems</span>
+                                </div>
+
+                                <div className="overflow-x-auto min-h-[150px]">
+                                    <table className="w-full text-left text-xs border-collapse">
+                                        <thead className="bg-slate-100 text-[9px] uppercase text-slate-600 font-bold border-b border-slate-200 select-none">
+                                            <tr>
+                                                {/* COLUMNA CÓDIGO CON ORDENAMIENTO */}
+                                                <th
+                                                    onClick={() => handleSort('code')}
+                                                    className="p-1.5 cursor-pointer hover:bg-slate-200 transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>Código</span>
+                                                        <span className="text-[10px]">
+                                                            {sortField === 'code' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                                                        </span>
+                                                    </div>
+                                                </th>
+
+                                                {/* COLUMNA PRODUCTO CON ORDENAMIENTO */}
+                                                <th
+                                                    onClick={() => handleSort('name')}
+                                                    className="p-1.5 cursor-pointer hover:bg-slate-200 transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>Producto</span>
+                                                        <span className="text-[10px]">
+                                                            {sortField === 'name' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                                                        </span>
+                                                    </div>
+                                                </th>
+
+                                                <th className="p-1.5 text-center">Cant.</th>
+                                                <th className="p-1.5 text-right">Costo Unit.</th>
+                                                <th className="p-1.5 text-right">Flete/u.</th>
+                                                <th className="p-1.5 text-right">Costo Final</th>
+                                                <th className="p-1.5 text-right">Subtotal</th>
+                                                <th className="p-1.5 text-center"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 font-medium">
+                                            {paginatedItems.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={8} className="text-center py-5 text-slate-400 italic">No hay productos agregados al comprobante.</td>
+                                                </tr>
+                                            ) : (
+                                                paginatedItems.map(({ item, originalIndex }) => {
+                                                    const finalUnit = item.unitCost + fletePerUnit;
+                                                    return (
+                                                        <tr key={originalIndex} className="hover:bg-slate-50">
+                                                            <td className="p-1.5 font-mono font-bold text-slate-700">{item.code}</td>
+                                                            <td className="p-1.5 font-bold text-slate-800">{item.name}</td>
+                                                            <td className="p-1.5 text-center font-bold">{item.quantity} u.</td>
+                                                            <td className="p-1.5 text-right font-mono">$ {item.unitCost.toLocaleString()}</td>
+                                                            <td className="p-1.5 text-right font-mono text-amber-700">+ $ {fletePerUnit.toLocaleString()}</td>
+                                                            <td className="p-1.5 text-right font-mono font-bold text-emerald-800">$ {finalUnit.toLocaleString()}</td>
+                                                            <td className="p-1.5 text-right font-mono font-bold">$ {(item.quantity * item.unitCost).toLocaleString()}</td>
+                                                            <td className="p-1.5 text-center">
+                                                                <button
+                                                                    onClick={() => handleRemoveItem(originalIndex)}
+                                                                    className="text-slate-400 hover:text-rose-600 font-bold px-1"
+                                                                    title="Quitar ítem"
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
 
+                            {/* PAGINADOR AL PIE DE LA TABLA */}
+                            {items.length > 0 && (
+                                <div className="p-1.5 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-[10px] text-slate-600">
+                                    <div className="flex items-center gap-1.5">
+                                        <span>Mostrar:</span>
+                                        <select
+                                            value={itemsPerPage}
+                                            onChange={(e) => {
+                                                setItemsPerPage(Number(e.target.value));
+                                                setCurrentPage(1);
+                                            }}
+                                            className="border border-slate-300 rounded px-1 py-0.5 bg-white text-[10px] font-bold"
+                                        >
+                                            <option value={5}>5</option>
+                                            <option value={10}>10</option>
+                                            <option value={20}>20</option>
+                                        </select>
+                                        <span>de {items.length} ítems</span>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 font-bold">
+                                        <button
+                                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                            disabled={currentPage === 1}
+                                            className="px-2 py-0.5 border border-slate-300 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white"
+                                        >
+                                            ◀
+                                        </button>
+                                        <span className="px-1.5">
+                                            Pág. {currentPage} / {totalPages}
+                                        </span>
+                                        <button
+                                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="px-2 py-0.5 border border-slate-300 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white"
+                                        >
+                                            ▶
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
+
+                        {/* TARJETA DE RESUMEN Y TOTALES COMPACTA */}
+                        <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
+
+                                {/* Gastos / Flete */}
+                                <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 space-y-0.5">
+                                    <label className="block text-[9px] font-bold uppercase text-slate-600">
+                                        Flete / Gastos Varios ($)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        placeholder="$ 0"
+                                        value={otherCostsTotal}
+                                        onChange={(e) => setOtherCostsTotal(e.target.value === '' ? '' : Number(e.target.value))}
+                                        className="w-full border border-slate-300 bg-white rounded-md p-1 text-xs font-bold text-amber-700 font-mono focus:ring-1 focus:ring-slate-800"
+                                    />
+                                    {totalUnits > 0 && otherCostsTotal !== '' && (
+                                        <p className="text-[9px] text-slate-500 pt-0.5">
+                                            Prorrateo: <strong className="text-amber-700 font-mono">+ $ {fletePerUnit.toLocaleString()}</strong> por unidad ({totalUnits} u. en total)
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Totales y Acción */}
+                                <div className="flex flex-col justify-between space-y-1 text-right">
+                                    <div>
+                                        <span className="text-[9px] uppercase font-bold text-slate-400 block">Total Comprobante</span>
+                                        <span className="text-base font-bold font-mono text-emerald-700">$ {totalFinal.toLocaleString()}</span>
+                                    </div>
+
+                                    <button
+                                        onClick={handleSubmitPurchase}
+                                        disabled={loading || items.length === 0}
+                                        className="w-full py-1.5 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white rounded-md text-xs font-bold shadow transition-all"
+                                    >
+                                        {loading ? 'Guardando Comprobante...' : '💾 Registrar Comprobante'}
+                                    </button>
+                                </div>
+
+                            </div>
+                        </div>
+
                     </div>
 
                 </div>
 
             </div>
-
         </div>
     );
 }

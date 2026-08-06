@@ -1,8 +1,10 @@
-import './globals.css';
+// app/layout.tsx
+import React from 'react';
+import './globals.css'; // o las clases de CSS que uses
 
 export const metadata = {
-    title: 'Tienda de Plantas & POS',
-    description: 'Sistema de ventas y e-commerce',
+    title: 'Tienda de Plantas ERP',
+    description: 'Sistema de Gestión ERP / CRM',
 };
 
 export default function RootLayout({
@@ -12,7 +14,9 @@ export default function RootLayout({
 }) {
     return (
         <html lang="es">
-            <body>{children}</body>
+            <body className="antialiased bg-slate-50 text-slate-800">
+                {children}
+            </body>
         </html>
     );
 }

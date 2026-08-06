@@ -12,6 +12,9 @@ export default function HistorialVentasPage() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>({ summary: {}, sales: [] });
 
+    const [paginaActual, setPaginaActual] = useState(1);
+    const registrosPorPagina = 5;
+
     useEffect(() => {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
@@ -26,6 +29,7 @@ export default function HistorialVentasPage() {
 
     const loadReport = async (start = startDate, end = endDate) => {
         setLoading(true);
+        setPaginaActual(1);
         try {
             const res = await getSalesReport({ startDate: start, endDate: end });
             if (res?.success) {
@@ -44,26 +48,40 @@ export default function HistorialVentasPage() {
         return `${d.toLocaleDateString('es-AR')} - ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs`;
     };
 
+    // Ordenamiento estricto por fecha/hora descendente (más recientes primero)
+    const ventasOrdenadas = [...(data.sales || [])].sort((a: any, b: any) => {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    const totalRegistros = ventasOrdenadas.length;
+    const totalPaginas = Math.ceil(totalRegistros / registrosPorPagina) || 1;
+    const indiceInicio = (paginaActual - 1) * registrosPorPagina;
+    const ventasPaginadas = ventasOrdenadas.slice(indiceInicio, indiceInicio + registrosPorPagina);
+
     if (!mounted) {
         return (
-            <div className="h-screen flex items-center justify-center bg-slate-100/60 text-slate-400 text-xs font-semibold">
+            <div className="w-full flex items-center justify-center p-12 text-slate-400 text-xs font-semibold">
                 Cargando historial de ventas...
             </div>
         );
     }
 
     return (
-        <div className="h-screen flex flex-col bg-slate-100/60 p-4 md:p-6 max-w-7xl mx-auto font-sans text-slate-800 overflow-hidden select-none">
+        <div className="w-full flex flex-col font-sans text-slate-800 pb-1 overflow-x-hidden">
 
-            {/* ENCABEZADO Y FILTROS POR FECHA */}
-            <header className="flex-shrink-0 flex items-center justify-between pb-3 border-b border-slate-200 gap-3">
+            {/* ENCABEZADO ESTÁNDAR JUSTIFICADO */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-1.5 px-1 gap-2 shrink-0">
                 <div>
-                    <h1 className="text-base font-bold text-slate-900 uppercase tracking-wide">📈 Historial e Informes de Ventas</h1>
-                    <p className="text-[11px] text-slate-500">Consulta acumulada de facturación y detalle por rango de fechas.</p>
+                    <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+                        <span>📈</span> Historial e Informes de Ventas
+                    </h1>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                        Consulta acumulada de facturación y detalle por rango de fechas.
+                    </p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 bg-white px-2 py-1 border border-slate-300 rounded-lg shadow-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1.5 bg-white px-2 py-1 border border-slate-300 rounded-lg shadow-2xs">
                         <label className="text-[11px] font-bold text-slate-600">Desde:</label>
                         <input
                             type="date"
@@ -73,7 +91,7 @@ export default function HistorialVentasPage() {
                         />
                     </div>
 
-                    <div className="flex items-center gap-1.5 bg-white px-2 py-1 border border-slate-300 rounded-lg shadow-sm">
+                    <div className="flex items-center gap-1.5 bg-white px-2 py-1 border border-slate-300 rounded-lg shadow-2xs">
                         <label className="text-[11px] font-bold text-slate-600">Hasta:</label>
                         <input
                             type="date"
@@ -86,113 +104,157 @@ export default function HistorialVentasPage() {
                     <button
                         type="button"
                         onClick={() => loadReport()}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1 uppercase tracking-wide"
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center gap-1 uppercase tracking-wide cursor-pointer"
                     >
                         🔍 Filtrar
                     </button>
 
                     <Link
                         href="/caja"
-                        className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1"
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center gap-1"
                     >
                         📊 Ir a Caja
                     </Link>
                 </div>
-            </header>
+            </div>
 
             {loading ? (
-                <div className="flex-1 flex items-center justify-center text-slate-400 text-xs font-semibold">
+                <div className="py-20 flex items-center justify-center text-slate-400 text-xs font-semibold">
                     Cargando informe acumulado...
                 </div>
             ) : (
-                <div className="flex-1 mt-3 flex flex-col space-y-3 min-h-0 overflow-hidden">
+                <div className="flex flex-col space-y-1.5">
 
                     {/* RESUMEN ACUMULADO DEL PERIODO */}
-                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 flex-shrink-0">
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-1.5 shrink-0">
                         {/* TOTAL ACUMULADO */}
-                        <div className="bg-slate-900 text-white p-3 rounded-xl shadow-sm border border-slate-800 col-span-1 sm:col-span-1 flex flex-col justify-between">
+                        <div className="bg-slate-900 text-white p-2.5 rounded-xl shadow-2xs border border-slate-800 col-span-2 lg:col-span-1 flex flex-col justify-between">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Acumulado</span>
-                            <span className="text-xl font-bold text-emerald-400 mt-1" suppressHydrationWarning>
-                                ${(data.summary?.totalAmount || 0).toLocaleString('es-AR')}
+                            <span className="text-base font-bold text-emerald-400 mt-0.5" suppressHydrationWarning>
+                                ${(data.summary?.totalAmount || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
-                            <span className="text-[10px] text-emerald-300 font-semibold mt-0.5">
-                                {data.summary?.totalSales || 0} operaciones
+                            <span className="text-[10px] text-emerald-300 font-semibold">
+                                {totalRegistros} operaciones
                             </span>
                         </div>
 
                         {/* TARJETAS POR MEDIO DE PAGO */}
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">💵 Efectivo</span>
-                            <span className="text-base font-extrabold text-emerald-700 mt-1" suppressHydrationWarning>
-                                ${(data.summary?.efectivo || 0).toLocaleString('es-AR')}
-                            </span>
+                        <div className="bg-white p-2 rounded-xl border border-slate-200/85 shadow-2xs flex items-center gap-2.5">
+                            <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm">💵</div>
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Efectivo</p>
+                                <p className="text-xs font-extrabold text-emerald-700 mt-0.5" suppressHydrationWarning>
+                                    ${(data.summary?.efectivo || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            </div>
                         </div>
 
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">📲 Transf.</span>
-                            <span className="text-base font-extrabold text-sky-700 mt-1" suppressHydrationWarning>
-                                ${(data.summary?.transferencia || 0).toLocaleString('es-AR')}
-                            </span>
+                        <div className="bg-white p-2 rounded-xl border border-slate-200/85 shadow-2xs flex items-center gap-2.5">
+                            <div className="p-2 bg-sky-50 text-sky-700 rounded-lg text-sm">📲</div>
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Transferencia</p>
+                                <p className="text-xs font-extrabold text-sky-700 mt-0.5" suppressHydrationWarning>
+                                    ${(data.summary?.transferencia || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            </div>
                         </div>
 
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">💳 Débito</span>
-                            <span className="text-base font-extrabold text-indigo-700 mt-1" suppressHydrationWarning>
-                                ${(data.summary?.debito || 0).toLocaleString('es-AR')}
-                            </span>
+                        <div className="bg-white p-2 rounded-xl border border-slate-200/85 shadow-2xs flex items-center gap-2.5">
+                            <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm">💳</div>
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Débito</p>
+                                <p className="text-xs font-extrabold text-indigo-700 mt-0.5" suppressHydrationWarning>
+                                    ${(data.summary?.debito || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            </div>
                         </div>
 
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">💳 Crédito</span>
-                            <span className="text-base font-extrabold text-purple-700 mt-1" suppressHydrationWarning>
-                                ${(data.summary?.credito || 0).toLocaleString('es-AR')}
-                            </span>
+                        <div className="bg-white p-2 rounded-xl border border-slate-200/85 shadow-2xs flex items-center gap-2.5">
+                            <div className="p-2 bg-purple-50 text-purple-700 rounded-lg text-sm">💳</div>
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Crédito</p>
+                                <p className="text-xs font-extrabold text-purple-700 mt-0.5" suppressHydrationWarning>
+                                    ${(data.summary?.credito || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            </div>
                         </div>
                     </div>
 
-                    {/* TABLA / GRILLA DE VENTAS CON SCROLL */}
-                    <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col min-h-0 overflow-hidden">
-                        <div className="p-3 bg-slate-50 border-b border-slate-200 font-bold text-xs uppercase tracking-wider text-slate-700 flex justify-between items-center flex-shrink-0">
+                    {/* TABLA / GRILLA DE VENTAS CON ALTURA ESTIRADA Y ORDENADA */}
+                    <div className="bg-white rounded-xl border border-slate-200/85 shadow-2xs flex flex-col">
+                        <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 font-bold text-xs uppercase tracking-wider text-slate-700 flex justify-between items-center rounded-t-xl">
                             <span>📋 Listado de Operaciones Emitidas</span>
                             <span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full">
-                                {data.sales?.length || 0} registros
+                                {totalRegistros} registros
                             </span>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-2">
-                            {!data.sales || data.sales.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                                    <span className="text-3xl mb-1">🔍</span>
-                                    <p className="text-xs font-semibold text-slate-600">No se encontraron ventas para el período seleccionado.</p>
-                                </div>
-                            ) : (
-                                data.sales.map((sale: any) => (
-                                    <div key={sale.id} className="py-2.5 px-3 hover:bg-slate-50/80 rounded-lg transition-colors flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-mono text-[10px] font-bold text-slate-400">
-                                                    #{sale.id.slice(-6).toUpperCase()}
-                                                </span>
-                                                <span className="font-bold text-xs text-slate-800 uppercase">
-                                                    {sale.customerName || 'CLIENTE OCASIONAL'}
-                                                </span>
-                                            </div>
-                                            <div className="text-[10px] text-slate-400 font-medium" suppressHydrationWarning>
-                                                📅 {formatDate(sale.createdAt)}
-                                            </div>
-                                        </div>
-
-                                        <div className="text-right">
-                                            <span className="font-bold text-xs text-slate-900 block" suppressHydrationWarning>
-                                                ${sale.total?.toLocaleString('es-AR')}
-                                            </span>
-                                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 uppercase border border-slate-200">
-                                                {sale.paymentMethod}
-                                            </span>
-                                        </div>
+                        <div className="px-2 py-1.5 min-h-[310px] flex flex-col justify-between">
+                            <div className="divide-y divide-slate-100">
+                                {ventasPaginadas.length === 0 ? (
+                                    <div className="py-14 flex flex-col items-center justify-center text-center text-slate-400">
+                                        <span className="text-3xl mb-1">🔍</span>
+                                        <p className="text-xs font-semibold text-slate-600">No se encontraron ventas para el período seleccionado.</p>
                                     </div>
-                                ))
-                            )}
+                                ) : (
+                                    ventasPaginadas.map((sale: any) => (
+                                        <div key={sale.id} className="py-2 px-2 hover:bg-slate-50/80 rounded-lg transition-colors flex items-center justify-between">
+                                            <div className="space-y-0.5">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono text-[10px] font-bold text-slate-400">
+                                                        #{sale.id.slice(-6).toUpperCase()}
+                                                    </span>
+                                                    <span className="font-bold text-xs text-slate-800 uppercase">
+                                                        {sale.customerName || 'CLIENTE OCASIONAL'}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 font-medium" suppressHydrationWarning>
+                                                    📅 {formatDate(sale.createdAt)} {sale.user?.name ? `• 👤 ${sale.user.name}` : ''}
+                                                </div>
+                                            </div>
+
+                                            <div className="text-right">
+                                                <span className="font-bold text-xs text-slate-900 block" suppressHydrationWarning>
+                                                    ${(sale.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </span>
+                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase border border-slate-200">
+                                                    {sale.paymentMethod}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* BARRA DE PAGINACIÓN */}
+                            <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100 text-xs px-1 pb-0.5">
+                                <span className="text-slate-500 font-medium text-[11px]">
+                                    {totalRegistros > 0
+                                        ? `Mostrando ${indiceInicio + 1} a ${Math.min(indiceInicio + registrosPorPagina, totalRegistros)} de ${totalRegistros} registros`
+                                        : 'Sin registros para mostrar'}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                    <button
+                                        type="button"
+                                        disabled={paginaActual === 1 || totalRegistros === 0}
+                                        onClick={() => setPaginaActual(prev => Math.max(prev - 1, 1))}
+                                        className="px-2.5 py-1 bg-white border border-slate-300 rounded-md font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs cursor-pointer"
+                                    >
+                                        Anterior
+                                    </button>
+                                    <span className="px-2 font-bold text-slate-700 text-[11px]">
+                                        Página {totalRegistros === 0 ? 0 : paginaActual} de {totalPaginas}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        disabled={paginaActual === totalPaginas || totalRegistros === 0}
+                                        onClick={() => setPaginaActual(prev => Math.min(prev + 1, totalPaginas))}
+                                        className="px-2.5 py-1 bg-white border border-slate-300 rounded-md font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs cursor-pointer"
+                                    >
+                                        Siguiente
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
