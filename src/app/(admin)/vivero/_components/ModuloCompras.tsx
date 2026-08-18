@@ -4,16 +4,19 @@ import React, { useState, useEffect } from 'react';
 
 export default function ModuloCompras({
     productos = [],
-    setProductos
+    setProductos,
+    historialCompras = [],
+    setHistorialCompras
 }: {
     productos?: any[];
     setProductos?: React.Dispatch<React.SetStateAction<any[]>>;
+    historialCompras?: any[];
+    setHistorialCompras?: React.Dispatch<React.SetStateAction<any[]>>;
 }) {
     const [compraProductoId, setCompraProductoId] = useState('');
     const [compraCantidad, setCompraCantidad] = useState<number | ''>(1);
     const [compraCostoUnitario, setCompraCostoUnitario] = useState('');
     const [compraImpuesto, setCompraImpuesto] = useState('21');
-    const [historialCompras, setHistorialCompras] = useState<any[]>([]);
 
     const categoriasMargenes: Record<string, number> = {
         'INTERIOR': 1.60,
@@ -21,9 +24,10 @@ export default function ModuloCompras({
         'INSUMOS': 1.40
     };
 
+    // Sincronizar costos al cambiar de producto seleccionado
     useEffect(() => {
-        if (compraProductoId && productos.length > 0) {
-            const encontrado = productos.find(p => p.id === Number(compraProductoId));
+        if (compraProductoId !== '' && productos.length > 0) {
+            const encontrado = productos.find(p => Number(p.id) === Number(compraProductoId));
             if (encontrado) {
                 setCompraCostoUnitario(encontrado.ultimo_costo_neto?.toString() || '');
                 setCompraImpuesto((encontrado.impuesto || 21).toString());
@@ -33,42 +37,55 @@ export default function ModuloCompras({
 
     const handleRegistrarCompra = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!compraProductoId || !compraCantidad || !compraCostoUnitario) return;
+        if (compraProductoId === '' || compraCantidad === '' || compraCostoUnitario === '') return;
 
+        const idSeleccionado = Number(compraProductoId);
         const cantidadIngresada = Number(compraCantidad);
         const costoNetoIngresado = Number(compraCostoUnitario);
-        const prodExistente = productos.find(p => p.id === Number(compraProductoId));
 
-        if (!prodExistente) return;
+        // Buscar el producto asegurando coincidencia numérica de IDs
+        const prodExistente = productos.find(p => Number(p.id) === idSeleccionado);
+
+        if (!prodExistente) {
+            console.error("No se encontró el producto con ID:", idSeleccionado);
+            return;
+        }
 
         const factorMargen = categoriasMargenes[prodExistente.categoria] || 1.50;
         const nuevoPrecioVentaNeto = Math.round(costoNetoIngresado * factorMargen);
         const totalCompradoConIva = (costoNetoIngresado * (1 + Number(compraImpuesto) / 100)) * cantidadIngresada;
 
+        // 1. Actualiza de manera estricta el stock global en ViveroPage
         if (setProductos) {
-            setProductos(productos.map(p => {
-                if (p.id === prodExistente.id) {
+            const nuevosProductos = productos.map(p => {
+                if (Number(p.id) === idSeleccionado) {
                     return {
                         ...p,
-                        cantidad_actual: (p.cantidad_actual || 0) + cantidadIngresada,
+                        cantidad_actual: Number(p.cantidad_actual || 0) + cantidadIngresada,
                         valor_unitario: nuevoPrecioVentaNeto,
                         ultimo_costo_neto: costoNetoIngresado
                     };
                 }
                 return p;
-            }));
+            });
+            setProductos(nuevosProductos);
         }
 
-        setHistorialCompras([{
-            id: `CMP-${Date.now().toString().slice(-4)}`,
-            fecha: new Date().toLocaleDateString('es-AR'),
-            productoNombre: prodExistente.nombre,
-            cantidadComprada: cantidadIngresada,
-            costoUnitarioNeto: costoNetoIngresado,
-            nuevoPrecioVentaNeto: nuevoPrecioVentaNeto,
-            totalCompra: totalCompradoConIva
-        }, ...historialCompras]);
+        // 2. Registra en el historial global de compras
+        if (setHistorialCompras) {
+            const nuevoRemito = {
+                id: `CMP-${Date.now().toString().slice(-4)}`,
+                fecha: new Date().toLocaleDateString('es-AR'),
+                productoNombre: prodExistente.nombre,
+                cantidadComprada: cantidadIngresada,
+                costoUnitarioNeto: costoNetoIngresado,
+                nuevoPrecioVentaNeto: nuevoPrecioVentaNeto,
+                totalCompra: totalCompradoConIva
+            };
+            setHistorialCompras([nuevoRemito, ...historialCompras]);
+        }
 
+        // Resetear formulario
         setCompraProductoId('');
         setCompraCantidad(1);
         setCompraCostoUnitario('');
@@ -88,11 +105,13 @@ export default function ModuloCompras({
                             required
                             value={compraProductoId}
                             onChange={(e) => setCompraProductoId(e.target.value)}
-                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 font-semibold outline-none focus:border-emerald-500"
+                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 font-semibold outline-none focus:border-emerald-500 cursor-pointer"
                         >
                             <option value="">-- Seleccionar Especie / Insumo --</option>
                             {productos.map(p => (
-                                <option key={p.id} value={p.id}>{p.codigo} - {p.nombre}</option>
+                                <option key={p.id} value={p.id}>
+                                    {p.codigo} - {p.nombre} (Stock actual: {p.cantidad_actual})
+                                </option>
                             ))}
                         </select>
                     </div>
@@ -128,7 +147,7 @@ export default function ModuloCompras({
                         disabled={!compraProductoId}
                         className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 py-2 text-xs font-bold text-white transition-colors disabled:opacity-50 cursor-pointer shadow-sm uppercase tracking-wide"
                     >
-                        Registrar Ingreso
+                        Registrar Ingreso y Actualizar Stock
                     </button>
                 </form>
             </div>
@@ -144,7 +163,7 @@ export default function ModuloCompras({
 
                 {historialCompras.length === 0 ? (
                     <div className="p-12 text-center text-slate-400 text-xs font-semibold my-auto">
-                        No hay remitos cargados en esta sesión.
+                        No hay remitos cargados en esta sesión. Al registrar una compra aquí, impactará directamente en el inventario del catálogo.
                     </div>
                 ) : (
                     <div className="overflow-x-auto text-xs">

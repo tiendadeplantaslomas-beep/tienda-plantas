@@ -1,226 +1,224 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { getCajaSummary } from '@/actions/caja-actions';
 
-export default function CajaPage() {
-    const [selectedDate, setSelectedDate] = useState<string>(
-        new Date().toISOString().split('T')[0]
-    );
-    const [loading, setLoading] = useState(true);
-    const [summary, setSummary] = useState<any>({
-        totals: { EFECTIVO: 0, TRANSFERENCIA: 0, DEBITO: 0, CREDITO: 0, TOTAL_GENERAL: 0, CANTIDAD_VENTAS: 0 },
-        sales: []
-    });
+interface CashMovement {
+    id: string;
+    type: 'INGRESO' | 'EGRESO' | 'VENTA';
+    description: string;
+    amount: number;
+    time: string;
+}
 
-    const [efectivoFisico, setEfectivoFisico] = useState<string>('');
+export default function CashRegisterPage() {
+    const [movements, setMovements] = useState<CashMovement[]>([
+        { id: '1', type: 'INGRESO', description: 'Fondo inicial de caja', amount: 15000, time: '08:30' },
+        { id: '2', type: 'VENTA', description: 'Ticket #_2026081201 (Ficus Lyrata)', amount: 30000, time: '09:15' },
+        { id: '3', type: 'EGRESO', description: 'Compra insumos de limpieza', amount: -4500, time: '11:00' },
+    ]);
 
-    const loadData = async (dateStr: string) => {
-        setLoading(true);
-        try {
-            const res = await getCajaSummary(dateStr);
-            if (res && res.success) {
-                setSummary(res);
-            }
-        } catch (error) {
-            console.error('Error al cargar la caja:', error);
-        } finally {
-            setLoading(false);
-        }
+    const [desc, setDesc] = useState('');
+    const [amount, setAmount] = useState('');
+    const [movementType, setMovementType] = useState<'INGRESO' | 'EGRESO'>('INGRESO');
+
+    const handleAddMovement = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!desc || !amount) return;
+
+        const value = Number(amount);
+        const finalAmount = movementType === 'EGRESO' ? -Math.abs(value) : Math.abs(value);
+
+        const newMov: CashMovement = {
+            id: Date.now().toString(),
+            type: movementType,
+            description: desc.toUpperCase(),
+            amount: finalAmount,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        setMovements([newMov, ...movements]);
+        setDesc('');
+        setAmount('');
     };
 
-    useEffect(() => {
-        loadData(selectedDate);
-    }, [selectedDate]);
-
-    const cashInSystem = summary?.totals?.EFECTIVO || 0;
-    const countedCash = parseFloat(efectivoFisico) || 0;
-    const difference = countedCash - cashInSystem;
+    const totalCash = movements.reduce((acc, m) => acc + m.amount, 0);
+    const totalIngresos = movements.filter(m => m.amount > 0).reduce((acc, m) => acc + m.amount, 0);
+    const totalEgresos = movements.filter(m => m.amount < 0).reduce((acc, m) => acc + m.amount, 0);
 
     return (
-        <div className="w-full flex flex-col font-sans text-slate-800 pb-0">
+        <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-100 text-slate-800 overflow-hidden font-sans">
 
-            {/* ENCABEZADO COMPACTO */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-1 px-1 gap-1 shrink-0">
+            {/* ENCABEZADO PRINCIPAL CON NAVEGACIÓN Y ACCESOS */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center px-3 pt-3 pb-1 shrink-0 gap-2">
                 <div>
                     <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
-                        <span>📊</span> Resumen y Arqueo Diario
+                        💵 Caja Diaria y Arqueo
                     </h1>
                     <p className="text-[11px] text-slate-500 font-medium">
-                        Consulta de recaudación, auditoría de caja e ingresos del día.
+                        Control de movimientos en efectivo, ingresos, egresos y cierre diario.
                     </p>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                    <div className="flex items-center gap-1 bg-white px-2 py-0.5 border border-slate-300 rounded shadow-sm">
-                        <label className="text-[10px] font-bold text-slate-600">Fecha:</label>
-                        <input
-                            type="date"
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            className="bg-transparent text-[11px] font-semibold text-slate-800 outline-none cursor-pointer"
-                        />
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={() => loadData(selectedDate)}
-                        className="px-2 py-0.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-[11px] font-semibold rounded shadow-sm transition-colors flex items-center gap-1"
-                    >
-                        🔄 Recargar
-                    </button>
-
+                {/* BOTÓN DE ACCESO AL HISTORIAL DE VENTAS */}
+                <div className="flex items-center gap-2">
                     <Link
                         href="/ventas/historial"
-                        className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold rounded shadow-sm transition-colors flex items-center gap-1"
+                        className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
-                        📈 Reportes Acumulados
+                        📈 Ver Historial de Ventas
                     </Link>
                 </div>
             </div>
 
-            {loading ? (
-                <div className="p-10 text-center text-slate-400 text-xs font-medium">
-                    Cargando información de caja...
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-stretch">
+            {/* CUERPO PRINCIPAL EN 3 COLUMNAS PARA CAJA */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 overflow-hidden">
 
-                    {/* COLUMNA IZQUIERDA: RESUMEN Y TICKETS (8 Columnas - Altura fija reducida a 340px para dejar espacio al pie de página) */}
-                    <div className="md:col-span-8 flex flex-col space-y-1.5">
-
-                        {/* TARJETAS DE MEDIOS DE PAGO */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 shrink-0">
-                            <div className="bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">💵 Efectivo</span>
-                                <span className="text-xs font-extrabold text-emerald-700 mt-0.5">${(summary?.totals?.EFECTIVO || 0).toLocaleString('es-AR')}</span>
-                            </div>
-
-                            <div className="bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">📲 Transf.</span>
-                                <span className="text-xs font-extrabold text-sky-700 mt-0.5">${(summary?.totals?.TRANSFERENCIA || 0).toLocaleString('es-AR')}</span>
-                            </div>
-
-                            <div className="bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">💳 Débito</span>
-                                <span className="text-xs font-extrabold text-indigo-700 mt-0.5">${(summary?.totals?.DEBITO || 0).toLocaleString('es-AR')}</span>
-                            </div>
-
-                            <div className="bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">💳 Crédito</span>
-                                <span className="text-xs font-extrabold text-purple-700 mt-0.5">${(summary?.totals?.CREDITO || 0).toLocaleString('es-AR')}</span>
-                            </div>
-                        </div>
-
-                        {/* BANNER TOTAL RECAUDADO */}
-                        <div className="shrink-0 bg-slate-900 text-white px-3 py-1.5 rounded-lg shadow-sm flex justify-between items-center border border-slate-800">
+                {/* COLUMNA IZQUIERDA: FORMULARIO DE NUEVO MOVIMIENTO */}
+                <div className="lg:col-span-3 flex flex-col gap-3 shrink-0">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                        <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100 pb-1">
+                            Registrar Movimiento
+                        </h3>
+                        <form onSubmit={handleAddMovement} className="space-y-2 text-xs">
                             <div>
-                                <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 block leading-tight">Total Recaudado</span>
-                                <span className="text-[12px] text-emerald-400 font-semibold">{summary?.totals?.CANTIDAD_VENTAS || 0} operaciones registradas</span>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">TIPO DE MOVIMIENTO</label>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMovementType('INGRESO')}
+                                        className={`py-1.5 font-bold rounded border transition-colors ${movementType === 'INGRESO' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
+                                    >
+                                        Ingreso (+)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMovementType('EGRESO')}
+                                        className={`py-1.5 font-bold rounded border transition-colors ${movementType === 'EGRESO' ? 'bg-rose-600 text-white border-rose-600' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
+                                    >
+                                        Egreso (-)
+                                    </button>
+                                </div>
                             </div>
-                            <span className="text-base font-bold text-emerald-400">${(summary?.totals?.TOTAL_GENERAL || 0).toLocaleString('es-AR')}</span>
-                        </div>
 
-                        {/* LISTA DE TICKETS */}
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden h-[340px]">
-                            <div className="p-1.5 bg-slate-50 border-b border-slate-200 font-bold text-[12px] uppercase tracking-wider text-slate-700 flex justify-between items-center shrink-0">
-                                <span>📋 Detalle de Ventas Emitidas</span>
-                                <span className="text-[12px] font-bold bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full">
-                                    {summary?.sales?.length || 0} tickets
-                                </span>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">DESCRIPCIÓN / MOTIVO *</label>
+                                <input
+                                    type="text"
+                                    placeholder="EJ. RETIRO, PAGO PROVEEDOR..."
+                                    value={desc}
+                                    onChange={(e) => setDesc(e.target.value)}
+                                    className="w-full border border-slate-200 rounded p-1.5 uppercase font-medium bg-slate-50 outline-none"
+                                />
                             </div>
 
-                            <div className="flex-1 divide-y divide-slate-100 p-1.5 overflow-y-auto">
-                                {!summary?.sales || summary.sales.length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center p-4 text-center text-slate-400">
-                                        <span className="text-xl mb-0.5">🧾</span>
-                                        <p className="text-[10px] font-semibold text-slate-600">No hay ventas registradas en esta fecha.</p>
-                                    </div>
-                                ) : (
-                                    summary.sales.map((sale: any) => (
-                                        <div key={sale.id} className="py-1 px-1.5 flex justify-between items-center hover:bg-slate-50/80 rounded transition-colors">
-                                            <div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="font-mono text-[9px] font-bold text-slate-400">#{sale.id.slice(-6).toUpperCase()}</span>
-                                                    <span className="font-bold text-[10px] text-slate-800 uppercase">{sale.customerName || 'CLIENTE OCASIONAL'}</span>
-                                                </div>
-                                                <span className="text-[8px] text-slate-400 font-medium">
-                                                    ⏰ {new Date(sale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs | {sale.items?.length || 0} ítems
-                                                </span>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="font-bold text-[10px] text-slate-900 block">${sale.total.toLocaleString('es-AR')}</span>
-                                                <span className="text-[7px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-600 uppercase border border-slate-200">
-                                                    {sale.paymentMethod}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">MONTO [$] *</label>
+                                <input
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    className="w-full border border-slate-200 rounded p-1.5 font-mono font-bold bg-slate-50 outline-none"
+                                />
                             </div>
-                        </div>
 
+                            <button
+                                type="submit"
+                                className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded font-bold uppercase shadow-sm transition-colors mt-2 cursor-pointer"
+                            >
+                                Guardar Movimiento
+                            </button>
+                        </form>
                     </div>
 
-                    {/* COLUMNA DERECHA: CONTROL DE EFECTIVO Y ARQUEO (4 Columnas - Ligeramente más extendido a 385px para sobresalir abajo manteniendo visible el footer) */}
-                    <div className="md:col-span-4 bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-[385px]">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5 flex-1 flex flex-col justify-end">
+                        <button className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-lg font-bold text-xs uppercase shadow-2xs transition-colors cursor-pointer">
+                            🔒 Cerrar Caja del Día
+                        </button>
+                    </div>
+                </div>
 
-                        <div className="space-y-2 overflow-y-auto pr-0.5 flex-1">
-                            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-1">
-                                <span>🔍</span> Control y Arqueo de Efectivo
-                            </h2>
-
-                            <div className="space-y-1.5">
-                                <div>
-                                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-0.5">Efectivo Teórico (Sistema):</label>
-                                    <div className="p-1.5 bg-slate-100/80 border border-slate-200 rounded text-xs font-bold text-slate-800 font-mono">
-                                        ${cashInSystem.toLocaleString('es-AR')}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-0.5">Efectivo Físico en Cajón ($):</label>
-                                    <input
-                                        type="number"
-                                        placeholder="Ingrese el dinero recontado..."
-                                        value={efectivoFisico}
-                                        onChange={(e) => setEfectivoFisico(e.target.value)}
-                                        className="w-full px-1.5 py-1 bg-white border border-slate-300 rounded text-[10px] font-bold text-slate-800 outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
-                                    />
-                                </div>
-
-                                {efectivoFisico !== '' && (
-                                    <div className={`p-2 rounded border text-[10px] font-semibold space-y-0.5 ${difference === 0
-                                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                                        : difference > 0
-                                            ? 'bg-sky-50 border-sky-300 text-sky-900'
-                                            : 'bg-rose-50 border-rose-300 text-rose-900'
-                                        }`}>
-                                        <span className="block text-[8px] uppercase font-bold text-slate-600">Estado de Arqueo:</span>
-                                        {difference === 0 && <p className="font-bold">✅ Caja cuadrada perfectamente.</p>}
-                                        {difference > 0 && <p className="font-bold">💙 Sobrante: +${difference.toLocaleString('es-AR')}</p>}
-                                        {difference < 0 && <p className="font-bold">⚠️ Faltante: -${Math.abs(difference).toLocaleString('es-AR')}</p>}
-                                    </div>
-                                )}
-                            </div>
+                {/* COLUMNA CENTRAL: GRILLA DE MOVIMIENTOS DEL DÍA */}
+                <div className="lg:col-span-6 flex flex-col gap-3 h-full overflow-hidden">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-2xs flex-1 flex flex-col overflow-hidden">
+                        <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                            <h3 className="text-xs font-black uppercase text-slate-600 tracking-wider">Movimientos de Caja Diaria</h3>
+                            <span className="text-[10px] font-mono text-slate-400">Turno: Mañana / Tarde</span>
                         </div>
-
-                        {/* BOTÓN IMPRIMIR */}
-                        <div className="pt-2 border-t border-slate-200 shrink-0 mt-1">
-                            <button
-                                type="button"
-                                onClick={() => window.print()}
-                                className="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded font-bold text-[10px] uppercase transition-colors shadow-sm flex items-center justify-center gap-1.5 tracking-wide"
-                            >
-                                🖨️ Imprimir Resumen Diario
-                            </button>
+                        <div className="overflow-x-auto flex-1">
+                            <table className="w-full text-left text-xs border-collapse">
+                                <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 font-bold border-b border-slate-200 sticky top-0">
+                                    <tr>
+                                        <th className="p-2.5">Hora</th>
+                                        <th className="p-2.5">Tipo</th>
+                                        <th className="p-2.5">Descripción</th>
+                                        <th className="p-2.5 text-right">Monto [$]</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-medium">
+                                    {movements.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={4} className="text-center py-12 text-slate-400 italic text-xs">
+                                                No hay movimientos registrados en la caja de hoy.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        movements.map(m => (
+                                            <tr key={m.id} className="hover:bg-slate-50">
+                                                <td className="p-2.5 font-mono text-slate-500">{m.time}</td>
+                                                <td className="p-2.5">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${m.amount > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'}`}>
+                                                        {m.type}
+                                                    </span>
+                                                </td>
+                                                <td className="p-2.5 font-bold text-slate-800 uppercase">{m.description}</td>
+                                                <td className={`p-2.5 text-right font-mono font-bold ${m.amount > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                                                    $ {m.amount.toLocaleString('es-AR')}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
+                    </div>
+                </div>
 
+                {/* COLUMNA DERECHA: RESUMEN Y ARQUEO */}
+                <div className="lg:col-span-3 flex flex-col gap-3 shrink-0">
+
+                    {/* TARJETA DE SALDO EN CAJA */}
+                    <div className="bg-slate-900 text-white p-4 rounded-xl shadow-md space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Efectivo en Caja:</span>
+                        <div className="text-3xl font-black font-mono text-emerald-400">
+                            $ {totalCash.toLocaleString('es-AR')}
+                        </div>
+                        <p className="text-[10px] text-slate-400 pt-1">
+                            Balance neto del día actual.
+                        </p>
+                    </div>
+
+                    {/* DESGLOSE DE INGRESOS Y EGRESOS */}
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs">
+                        <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100 pb-1">
+                            Arqueo Parcial
+                        </h3>
+                        <div className="space-y-2 text-slate-600 font-medium">
+                            <p className="flex justify-between">
+                                <span>Total Ingresos:</span>
+                                <strong className="text-emerald-700 font-mono">+ $ {totalIngresos.toLocaleString('es-AR')}</strong>
+                            </p>
+                            <p className="flex justify-between">
+                                <span>Total Egresos:</span>
+                                <strong className="text-rose-600 font-mono">- $ {Math.abs(totalEgresos).toLocaleString('es-AR')}</strong>
+                            </p>
+                        </div>
                     </div>
 
                 </div>
-            )}
+
+            </div>
         </div>
     );
 }

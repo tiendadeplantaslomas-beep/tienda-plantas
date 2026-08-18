@@ -13,16 +13,18 @@ export interface CartItemInput {
 }
 
 export interface CreateSaleInput {
-    paymentMethod?: 'EFECTIVO' | 'TRANSFERENCIA' | 'DEBITO' | 'CREDITO';
+    paymentMethod?: 'EFECTIVO' | 'TRANSFERENCIA' | 'DEBITO' | 'CREDITO' | 'MERCADOPAGO';
     customerName?: string;
+    customerId?: string;
     notes?: string;
-    userId?: string; // ID opcional del vendedor/usuario logueado
+    userId?: string;
+    paidAmount?: number;
+    pendingBalance?: number;
+    paymentStatus?: string;
+    paymentReference?: string;
     items: CartItemInput[];
 }
 
-/**
- * Obtiene el resumen de ventas acumuladas del día de hoy para el globo del POS.
- */
 export async function getDailySalesSummary() {
     try {
         const startOfDay = new Date();
@@ -54,7 +56,7 @@ export async function getDailySalesSummary() {
 }
 
 /**
- * Registra una venta completa en la base de datos, descontando stock e ingresando movimientos.
+ * Registra una venta completa, descuenta stock y genera el movimiento de pago inicial.
  */
 export async function createSale(data: CreateSaleInput) {
     try {
@@ -64,6 +66,11 @@ export async function createSale(data: CreateSaleInput) {
 
         // 1. Calcular total general
         const total = data.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
+
+        // Definir valores financieros por defecto (si el front no los manda, se asume pago total al contado)
+        const paidAmount = data.paidAmount !== undefined ? data.paidAmount : total;
+        const pendingBalance = data.pendingBalance !== undefined ? data.pendingBalance : Math.max(0, total - paidAmount);
+        const paymentStatus = data.paymentStatus || (pendingBalance === 0 ? 'PAGADO' : paidAmount > 0 ? 'PAGO PARCIAL' : 'PENDIENTE');
 
         // 2. Transacción atómica en la Base de Datos
         const sale = await prisma.$transaction(async (tx) => {
@@ -83,14 +90,19 @@ export async function createSale(data: CreateSaleInput) {
                 }
             }
 
-            // Crear la Venta General con los campos exactos de SaleItem
+            // Crear la Venta General con sus campos financieros
             const newSale = await tx.sale.create({
                 data: {
                     total: total,
+                    paidAmount: paidAmount,
+                    pendingBalance: pendingBalance,
+                    paymentStatus: paymentStatus,
                     paymentMethod: data.paymentMethod || 'EFECTIVO',
+                    paymentReference: data.paymentReference || null,
                     customerName: data.customerName ? data.customerName.trim().toUpperCase() : 'CLIENTE OCASIONAL',
                     notes: data.notes ? data.notes.trim().toUpperCase() : null,
-                    ...(data.userId ? { userId: data.userId } : {}), // Si se especifica el ID del vendedor
+                    ...(data.customerId ? { customerId: data.customerId } : {}),
+                    ...(data.userId ? { userId: data.userId } : {}),
                     items: {
                         create: data.items.map(item => ({
                             productId: item.productId,
@@ -100,9 +112,24 @@ export async function createSale(data: CreateSaleInput) {
                     }
                 },
                 include: {
-                    items: true
+                    items: true,
+                    customer: true
                 }
             });
+
+            // Si se abonó algo de dinero en esta venta, registrarlo también en la tabla de Pagos (Payment)
+            if (paidAmount > 0) {
+                await tx.payment.create({
+                    data: {
+                        saleId: newSale.id,
+                        customerId: data.customerId || null,
+                        amount: paidAmount,
+                        method: data.paymentMethod || 'EFECTIVO',
+                        reference: data.paymentReference || null,
+                        notes: `PAGO INICIAL - VENTA N° ${newSale.id.slice(-6).toUpperCase()}`
+                    }
+                });
+            }
 
             // Descontar Stock y registrar Movimiento por cada producto
             for (const item of data.items) {
@@ -145,5 +172,33 @@ export async function createSale(data: CreateSaleInput) {
     } catch (error: any) {
         console.error('Error al procesar la venta:', error);
         return { error: error.message || 'Error interno al registrar la venta.' };
+    }
+}
+
+/**
+ * Busca clientes por nombre, teléfono o email para el selector del POS / Ventas.
+ */
+export async function searchCustomers(searchTerm: string = '') {
+    try {
+        const query = searchTerm.trim();
+
+        const customers = await prisma.customer.findMany({
+            where: query ? {
+                OR: [
+                    { name: { contains: query } },
+                    { phone: { contains: query } },
+                    { email: { contains: query } },
+                ]
+            } : undefined,
+            take: 10,
+            orderBy: {
+                name: 'asc'
+            }
+        });
+
+        return { success: true, customers };
+    } catch (error: any) {
+        console.error('Error al buscar clientes:', error);
+        return { success: false, customers: [], error: error.message };
     }
 }

@@ -11,8 +11,9 @@ generator client {
 // ENUMS (OMNICANALIDAD Y MEDIOS DE PAGO)
 // -------------------------------------------------------------
 enum SalesChannel {
-  MOSTRADOR // Venta en local físico / POS
-  ONLINE    // Venta a través del e-commerce
+  POS
+  MOSTRADOR 
+  ONLINE    
 }
 
 enum PaymentMethod {
@@ -32,19 +33,22 @@ model Category {
   defaultMargin Float     @default(100)
   products      Product[]
   createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  updatedAt     DateTime  @default(now()) @updatedAt
 }
 
+// -------------------------------------------------------------
+// PROVEEDORES
+// -------------------------------------------------------------
 model Supplier {
   id        String     @id @default(cuid())
   name      String     @unique
-  address   String?    // Dirección o Link de Google Maps
+  address   String?    
   phone     String?
   notes     String?
   products  Product[]
-  purchases Purchase[] // Relación con histórico de compras por lote
+  purchases Purchase[] 
   createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  updatedAt DateTime   @default(now()) @updatedAt
 }
 
 // -------------------------------------------------------------
@@ -54,8 +58,8 @@ model Product {
   id          String         @id @default(cuid())
   code        String         @unique
   name        String
-  description String?        @db.Text // Descripción extendida para la Tienda Online
-  imageUrl    String?        // Imagen principal para el e-commerce
+  description String?        @db.Text 
+  imageUrl    String?        @db.Text 
   
   categoryId  String
   category    Category       @relation(fields: [categoryId], references: [id])
@@ -63,31 +67,33 @@ model Product {
   supplierId  String?
   supplier    Supplier?      @relation(fields: [supplierId], references: [id])
 
-  cost        Int            // Costo base de compra
-  otherCosts  Int            @default(0) // Flete, transporte, etc.
-  price       Int            // Precio final al público
+  cost        Int            
+  otherCosts  Int            @default(0) 
+  price       Int            
   margin      Float          @default(100)
   taxRate     Float          @default(21)
   
-  // Gestión de existencias
   trackStock  Boolean        @default(true)
   stock       Int            @default(0)
-  minStock    Int            @default(2) // Cantidad de advertencia / stock mínimo
+  minStock    Int            @default(2) 
 
   createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  updatedAt   DateTime       @default(now()) @updatedAt
 
   saleItems     SaleItem[]
-  purchaseItems PurchaseItem[] // Relación con ítems de compras
+  purchaseItems PurchaseItem[] 
   movements     StockMovement[]
 }
 
+// -------------------------------------------------------------
+// MOVIMIENTOS DE MERCADERIAS
+// -------------------------------------------------------------
 model StockMovement {
   id            String   @id @default(cuid())
   productId     String
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   quantity      Int
-  type          String   // 'IN', 'OUT', 'ADJUSTMENT', 'PURCHASE', 'SALE_ONLINE', 'SALE_MOSTRADOR'
+  type          String   
   notes         String?
   previousStock Int
   newStock      Int
@@ -95,20 +101,20 @@ model StockMovement {
 }
 
 // -------------------------------------------------------------
-// COMPRAS EN LOTE (FACTURAS / REMITOS / PRESUPUESTOS)
+// COMPRAS EN LOTE
 // -------------------------------------------------------------
 model Purchase {
   id              String         @id @default(cuid())
-  docType         String         @default("FACTURA") // 'FACTURA', 'REMITO', 'PRESUPUESTO'
-  docNumber       String?        // Número de comprobante
-  date            DateTime       @default(now()) // Fecha de la compra / carga
+  docType         String         @default("FACTURA") 
+  docNumber       String?        
+  date            DateTime       @default(now()) 
   
   supplierId      String
   supplier        Supplier       @relation(fields: [supplierId], references: [id])
   
-  subtotal        Int            // Suma de (costo * cantidad)
-  otherCostsTotal Int            @default(0) // Total Flete / Gastos varios ($)
-  total           Int            // subtotal + otros costos
+  subtotal        Int            
+  otherCostsTotal Int            @default(0) 
+  total           Int            
 
   notes           String?
   createdAt       DateTime       @default(now())
@@ -116,6 +122,9 @@ model Purchase {
   items           PurchaseItem[]
 }
 
+// -------------------------------------------------------------
+// COMPRAS
+// -------------------------------------------------------------
 model PurchaseItem {
   id                 String   @id @default(cuid())
   purchaseId         String
@@ -125,30 +134,101 @@ model PurchaseItem {
   product            Product  @relation(fields: [productId], references: [id])
 
   quantity           Int
-  unitCost           Int      // Costo unitario base
-  allocatedOtherCost Int      @default(0) // Flete por unidad
-  finalUnitCost      Int      // unitCost + allocatedOtherCost
+  unitCost           Int      
+  allocatedOtherCost Int      @default(0) 
+  finalUnitCost      Int      
+}
+
+
+// -------------------------------------------------------------
+// CLIENTES
+// -------------------------------------------------------------
+model Customer {
+  id        String    @id @default(cuid())
+  name      String
+  email     String?   @unique
+  phone     String?
+  address   String?   
+  notes     String?   
+  sales     Sale[]    
+  payments  Payment[] 
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
 }
 
 // -------------------------------------------------------------
-// VENTAS Y DETALLE (OMNICANAL)
+// MOVIMIENTOS MANUALES DE CAJA
+// -------------------------------------------------------------
+model CashMovement {
+  id          String   @id @default(cuid())
+  type        String   
+  description String
+  amount      Int      
+  createdAt   DateTime @default(now())
+}
+
+// -------------------------------------------------------------
+// DATOS DE LA COMPAÑIA PARA LOS COMPROBANTES
+// -------------------------------------------------------------
+model CompanySettings {
+  id              String   @id @default("default")
+  tradeName       String   @default("TIENDA DE PLANTAS")
+  legalName       String   @default("DANIEL ALBERTO URRACA")
+  cuit            String   @default("20-XXXXXXXX-X")
+  vatCondition    String   @default("MONOTRIBUTO")
+  grossIncome     String   @default("20-XXXXXXXX-X")
+  activityStart   String   @default("01/01/2024")
+  address         String   @default("Lomas de Zamora, Buenos Aires")
+  phone           String   @default("11-XXXX-XXXX")
+  email           String   @default("contacto@tiendadeplantas.com")
+  logoUrl         String?
+  invoicePoint    Int      @default(1)
+  receiptLegend   String   @default("DOCUMENTO NO VÁLIDO COMO FACTURA")
+  defaultInvoiceC Boolean  @default(true)
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+// -------------------------------------------------------------
+// VENTAS / PEDIDOS (Limpio)
 // -------------------------------------------------------------
 model Sale {
-  id            String        @id @default(cuid())
-  channel       SalesChannel  @default(MOSTRADOR) // MOSTRADOR u ONLINE
-  paymentMethod PaymentMethod @default(EFECTIVO)
-  total         Int
-  customerName  String?
-  notes         String?
+  id               String        @id @default(cuid())
+  channel          SalesChannel  @default(MOSTRADOR)
   
-  // Relación opcional con cliente registrado en la web/local
-  customerId    String?
-  customer      Customer?     @relation(fields: [customerId], references: [id])
+  total            Int
+  paidAmount       Int           @default(0)    
+  pendingBalance   Int           @default(0)    
+  paymentStatus    String        @default("PENDIENTE") 
+  status           String        @default("REGISTRADO") 
+  
+  // Volvemos a declarar las columnas que el frontend necesita
+  paymentMethod    PaymentMethod @default(EFECTIVO) 
+  paymentReference String?       
 
-  createdAt     DateTime      @default(now())
-  items         SaleItem[]
+  isPaid           Boolean       @default(false)
+  isShipping       Boolean       @default(false)
+  shippingAddress  String?       @db.Text
+  
+  invoiced         Boolean       @default(false)
+  invoiceNumber    String?
+  invoiceType      String?
+
+  customerName     String?
+  notes            String?
+  
+  customerId       String?
+  customer         Customer?     @relation(fields: [customerId], references: [id])
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @default(now()) @updatedAt
+
+  items            SaleItem[]
+  payments         Payment[]     
 }
 
+// -------------------------------------------------------------
+// ÍTEMS DE LA VENTA
+// -------------------------------------------------------------
 model SaleItem {
   id        String   @id @default(cuid())
   saleId    String
@@ -160,15 +240,18 @@ model SaleItem {
 }
 
 // -------------------------------------------------------------
-// CLIENTES (REGISTRO WEB Y LOCAL)
+// PAGOS (El único lugar con método de pago)
 // -------------------------------------------------------------
-model Customer {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?  @unique
-  phone     String?
-  address   String?
-  sales     Sale[]   // Historial de compras del cliente
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Payment {
+  id            String        @id @default(cuid())
+  saleId        String?
+  sale          Sale?         @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  
+  amount        Int           
+  paymentMethod PaymentMethod @default(EFECTIVO) // <--- Debe coincidir aquí también
+  reference     String?       
+  notes         String?
+  createdAt     DateTime      @default(now())
 }

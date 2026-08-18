@@ -8,7 +8,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const [fechaActual, setFechaActual] = useState('');
     const pathname = usePathname();
 
-    // Verificamos si estamos exactamente en el dashboard (/dashboard)
     const esDashboard = pathname === '/dashboard';
 
     const usuarioLogueado = {
@@ -30,11 +29,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }, []);
 
     return (
-        <div className="min-h-screen bg-slate-100/60 text-slate-800 p-2 sm:p-4 flex flex-col justify-between">
-            <div className="max-w-7xl mx-auto w-full space-y-2 flex-1 flex flex-col">
+        <div className="h-screen w-screen bg-slate-100/60 text-slate-800 flex flex-col items-center overflow-hidden p-2">
+            <div className="w-full max-w-7xl h-full flex flex-col justify-between overflow-hidden gap-1">
 
                 {/* ENCABEZADO GLOBAL */}
-                <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 py-2 px-3 border-b border-slate-200 bg-white rounded-md shadow-2xs">
+                <header className="w-full shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 py-2 px-3 border border-slate-200 bg-white rounded-md shadow-2xs">
                     <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-white border border-slate-200 overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
                             <img
@@ -64,7 +63,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                            {/* Botón Volver al Dashboard (Oculto si estamos en /dashboard)[cite: 1] */}
                             {!esDashboard && (
                                 <Link
                                     href="/dashboard"
@@ -74,7 +72,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                     <span>Dashboard</span>
                                 </Link>
                             )}
-
                             <a
                                 href="/"
                                 target="_blank"
@@ -88,24 +85,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </div>
                 </header>
 
-                {/* CONTENIDO DE LAS PÁGINAS */}
-                <main className="flex-1 pb-2">
+                {/* CONTENIDO PRINCIPAL (Ocupa exactamente el espacio libre sin pisar el footer) */}
+                <main className="w-full flex-1 min-h-0 flex flex-col overflow-hidden relative">
                     {children}
                 </main>
 
+                {/* PIE DE PÁGINA GLOBAL */}
+                <footer className="w-full shrink-0 py-1 px-3 border border-slate-200 bg-white rounded-md shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-1 text-[10px] text-slate-500 font-medium">
+                    <div>
+                        <span>Tienda de Plantas ERP / CRM &copy; {new Date().getFullYear()}</span>
+                        <span className="hidden sm:inline"> &bull; Todos los derechos reservados</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span>Sistema de Gestión de Vivero</span>
+                        <span className="font-bold text-slate-700">v2.4.0</span>
+                    </div>
+                </footer>
             </div>
-
-            {/* PIE DE PÁGINA GLOBAL */}
-            <footer className="max-w-7xl mx-auto w-full pt-3 mt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-1 text-[10px] text-slate-400 font-medium">
-                <div>
-                    <span>Tienda de Plantas ERP / CRM &copy; {new Date().getFullYear()}[cite: 1]</span>
-                    <span className="hidden sm:inline"> &bull; Todos los derechos reservados[cite: 1]</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span>Sistema de Gestión de Vivero[cite: 1]</span>
-                    <span>v2.4.0[cite: 1]</span>
-                </div>
-            </footer>
         </div>
     );
 }

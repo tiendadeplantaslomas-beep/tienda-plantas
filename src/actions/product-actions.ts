@@ -4,10 +4,31 @@ import { prisma } from '@/lib/prisma';
 import { unstable_cache, revalidateTag } from 'next/cache';
 
 // ----------------------------------------------------------------------
+// INTERFACES / TIPOS
+// ----------------------------------------------------------------------
+
+export interface SaveProductInput {
+    id?: string;
+    code?: string;
+    name: string;
+    categoryId: string;
+    supplierId?: string | null;
+    cost?: number;
+    otherCosts?: number;
+    margin?: number;
+    taxRate?: number;
+    price?: number;
+    stock?: number;
+    minStock?: number;
+    description?: string;
+    imageUrl?: string;
+    trackStock?: boolean;
+}
+
+// ----------------------------------------------------------------------
 // CATEGORÍAS
 // ----------------------------------------------------------------------
 
-// Cachea el listado de categorías por 1 hora o hasta que se agregue una nueva
 export const getCategories = unstable_cache(
     async () => {
         return await prisma.category.findMany({
@@ -18,15 +39,14 @@ export const getCategories = unstable_cache(
     { revalidate: 3600, tags: ['categories'] }
 );
 
-export async function createCategory(name: string, defaultMargin: number = 100) {
+export async function createCategory(data: { name: string; defaultMargin: number }) {
     try {
-        const cleanName = name.trim().toUpperCase();
+        const cleanName = data.name.trim().toUpperCase();
         if (!cleanName) return { error: 'El nombre de la categoría es obligatorio.' };
-
+        
         const existing = await prisma.category.findFirst({
             where: { name: cleanName },
         });
-
         if (existing) {
             return { error: 'Ya existe una categoría con ese nombre.' };
         }
@@ -34,14 +54,12 @@ export async function createCategory(name: string, defaultMargin: number = 100) 
         const category = await prisma.category.create({
             data: {
                 name: cleanName,
-                defaultMargin,
+                defaultMargin: data.defaultMargin ?? 30,
             },
         });
 
-        // Invalida la caché de categorías al instante
         revalidateTag('categories');
-
-        return { category };
+        return { success: true, category };
     } catch (error) {
         console.error('Error en createCategory:', error);
         return { error: 'Error al crear la categoría.' };
@@ -52,7 +70,6 @@ export async function createCategory(name: string, defaultMargin: number = 100) 
 // PROVEEDORES
 // ----------------------------------------------------------------------
 
-// Cachea el listado de proveedores por 1 hora
 export const getSuppliers = unstable_cache(
     async () => {
         return await prisma.supplier.findMany({
@@ -63,7 +80,7 @@ export const getSuppliers = unstable_cache(
     { revalidate: 3600, tags: ['suppliers'] }
 );
 
-export async function createSupplier(data: { name: string; phone?: string; address?: string }) {
+export async function createSupplier(data: { name: string; phone?: string; address?: string; notes?: string }) {
     try {
         const cleanName = data.name.trim().toUpperCase();
         if (!cleanName) return { error: 'El nombre del proveedor es obligatorio.' };
@@ -71,7 +88,6 @@ export async function createSupplier(data: { name: string; phone?: string; addre
         const existing = await prisma.supplier.findFirst({
             where: { name: cleanName },
         });
-
         if (existing) {
             return { error: 'Ya existe un proveedor con ese nombre.' };
         }
@@ -81,13 +97,12 @@ export async function createSupplier(data: { name: string; phone?: string; addre
                 name: cleanName,
                 phone: data.phone || null,
                 address: data.address || null,
+                notes: data.notes || null,
             },
         });
 
-        // Invalida la caché de proveedores al instante
         revalidateTag('suppliers');
-
-        return { supplier };
+        return { success: true, supplier };
     } catch (error) {
         console.error('Error en createSupplier:', error);
         return { error: 'Error al crear el proveedor.' };
@@ -100,7 +115,6 @@ export async function createSupplier(data: { name: string; phone?: string; addre
 
 export async function getProducts() {
     try {
-        // Incluye las relaciones en una sola consulta para evitar la cascada N+1
         return await prisma.product.findMany({
             orderBy: { updatedAt: 'desc' },
             include: {
@@ -108,7 +122,7 @@ export async function getProducts() {
                     select: { id: true, name: true, defaultMargin: true },
                 },
                 supplier: {
-                    select: { id: true, name: true, phone: true, address: true },
+                    select: { id: true, name: true, phone: true, address: true, notes: true },
                 },
             },
         });
@@ -124,59 +138,49 @@ export async function generateNextProductCode(categoryId: string): Promise<strin
             where: { id: categoryId },
             select: { name: true },
         });
-
+        // Toma las primeras 3 letras en mayús. (ej: SUSTRATOS -> SUS)
         const prefix = category ? category.name.substring(0, 3).toUpperCase() : 'PRO';
         const count = await prisma.product.count({ where: { categoryId } });
-        const nextNum = (count + 1).toString().padStart(4, '0');
+        const nextNum = (count + 1).toString().padStart(3, '0'); // Consecutivo de 3 dígitos
 
-        return `${prefix}-${nextNum}`;
+        return `${prefix}${nextNum}`; // Resultado: SUS001
     } catch {
-        return `PROD-${Date.now().toString().slice(-4)}`;
+        return `PROD${Date.now().toString().slice(-3)}`;
     }
 }
 
-export async function saveProduct(formData: FormData) {
+export async function saveProduct(data: SaveProductInput) {
     try {
-        const id = formData.get('id') as string | null;
-        const name = (formData.get('name') as string)?.trim().toUpperCase();
-        const categoryId = formData.get('categoryId') as string;
-        const supplierId = (formData.get('supplierId') as string) || null;
-        const code = formData.get('code') as string;
-
-        const cost = parseFloat(formData.get('cost') as string) || 0;
-        const otherCosts = parseFloat(formData.get('otherCosts') as string) || 0;
-        const margin = parseFloat(formData.get('margin') as string) || 0;
-        const taxRate = parseFloat(formData.get('taxRate') as string) || 0;
-        const price = parseFloat(formData.get('price') as string) || 0;
-        const stock = parseInt(formData.get('stock') as string) || 0;
-        const minStock = parseInt(formData.get('minStock') as string) || 2;
-
-        if (!name || !categoryId) {
+        const name = data.name?.trim().toUpperCase();
+        if (!name || !data.categoryId) {
             return { error: 'Nombre y categoría son campos obligatorios.' };
         }
 
-        let finalCode = code;
+        let finalCode = data.code?.trim().toUpperCase();
         if (!finalCode) {
-            finalCode = await generateNextProductCode(categoryId);
+            finalCode = await generateNextProductCode(data.categoryId);
         }
 
         const productData = {
             name,
             code: finalCode,
-            categoryId,
-            supplierId,
-            cost,
-            otherCosts,
-            margin,
-            taxRate,
-            price,
-            stock,
-            minStock,
+            categoryId: data.categoryId,
+            supplierId: data.supplierId || null,
+            description: data.description || null,
+            imageUrl: data.imageUrl || null,
+            cost: Math.round(data.cost ?? 0),
+            otherCosts: Math.round(data.otherCosts ?? 0),
+            margin: Math.round(data.margin ?? 0),
+            taxRate: data.taxRate ?? 0,
+            price: Math.round(data.price ?? 0),
+            stock: Math.round(data.stock ?? 0),
+            minStock: Math.round(data.minStock ?? 2),
+            trackStock: data.trackStock ?? true,
         };
 
-        if (id) {
+        if (data.id) {
             await prisma.product.update({
-                where: { id },
+                where: { id: data.id },
                 data: productData,
             });
         } else {
@@ -205,27 +209,25 @@ export async function deleteProduct(id: string) {
 export async function importProductsBatch(productsData: any[]) {
     try {
         let count = 0;
-
         for (const raw of productsData) {
             const name = raw.Nombre || raw.name;
             if (!name) continue;
 
             const categoryName = (raw.Categoria || raw.category || 'GENERAL').toUpperCase();
             let category = await prisma.category.findFirst({ where: { name: categoryName } });
-
             if (!category) {
                 category = await prisma.category.create({
-                    data: { name: categoryName, defaultMargin: 100 },
+                    data: { name: categoryName, defaultMargin: 30 },
                 });
             }
 
-            const cost = parseFloat(raw.CostoBase || raw.cost) || 0;
-            const otherCosts = parseFloat(raw.FleteOtros || raw.otherCosts) || 0;
-            const margin = parseFloat(raw.Margen || raw.margin) || 100;
-            const taxRate = parseFloat(raw.IVA || raw.taxRate) || 21;
-            const price = parseFloat(raw.PrecioFinal || raw.price) || 0;
-            const stock = parseInt(raw.Stock || raw.stock) || 0;
-            const minStock = parseInt(raw.StockMinimo || raw.minStock) || 2;
+            const cost = Math.round(parseFloat(raw.CostoBase || raw.cost) || 0);
+            const otherCosts = Math.round(parseFloat(raw.FleteOtros || raw.otherCosts) || 0);
+            const margin = Math.round(parseFloat(raw.Margen || raw.margin) || 30);
+            const taxRate = parseFloat(raw.IVA || raw.taxRate) || 0;
+            const price = Math.round(parseFloat(raw.PrecioFinal || raw.price) || 0);
+            const stock = Math.round(parseInt(raw.Stock || raw.stock) || 0);
+            const minStock = Math.round(parseInt(raw.StockMinimo || raw.minStock) || 2);
             const code = raw.Codigo || raw.code || (await generateNextProductCode(category.id));
 
             await prisma.product.upsert({
@@ -254,7 +256,6 @@ export async function importProductsBatch(productsData: any[]) {
                     minStock,
                 },
             });
-
             count++;
         }
 
@@ -265,43 +266,41 @@ export async function importProductsBatch(productsData: any[]) {
         return { error: 'Error al importar los productos.' };
     }
 }
+
 export async function adjustStock(
     productId: string,
     quantity: number,
-    type: 'IN' | 'OUT' | 'ADJUSTMENT' = 'IN',
-    notes?: string
+    type: 'IN' | 'OUT' | 'ADJUSTMENT' = 'IN'
 ) {
     try {
         const currentProduct = await prisma.product.findUnique({
             where: { id: productId },
             select: { stock: true },
         });
-
         if (!currentProduct) {
             return { error: 'El producto seleccionado no existe.' };
         }
 
         let newStock = currentProduct.stock;
-
+        const roundedQty = Math.round(quantity);
         if (type === 'IN') {
-            if (quantity <= 0) return { error: 'La cantidad a ingresar debe ser mayor a cero.' };
-            newStock += quantity;
+            if (roundedQty <= 0) return { error: 'La cantidad a ingresar debe ser mayor a cero.' };
+            newStock += roundedQty;
         } else if (type === 'OUT') {
-            if (quantity <= 0) return { error: 'La cantidad a retirar debe ser mayor a cero.' };
-            if (currentProduct.stock - quantity < 0) {
+            if (roundedQty <= 0) return { error: 'La cantidad a retirar debe ser mayor a cero.' };
+            if (currentProduct.stock - roundedQty < 0) {
                 return { error: `Stock insuficiente. Stock actual: ${currentProduct.stock} unidades.` };
             }
-            newStock -= quantity;
+            newStock -= roundedQty;
         } else if (type === 'ADJUSTMENT') {
-            if (quantity < 0) return { error: 'El stock final no puede ser un número negativo.' };
-            newStock = quantity; // Pisa el valor
+            if (roundedQty < 0) return { error: 'El stock final no puede ser un número negativo.' };
+            newStock = roundedQty;
         }
 
         const updatedProduct = await prisma.product.update({
             where: { id: productId },
             data: { stock: newStock },
         });
-
         return { success: true, product: updatedProduct };
     } catch (error) {
         console.error('Error al actualizar el stock:', error);
