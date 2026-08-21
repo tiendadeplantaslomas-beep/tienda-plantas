@@ -47,7 +47,9 @@ export default function CashRegisterPage() {
     const totalEgresos = movements.filter(m => m.amount < 0).reduce((acc, m) => acc + m.amount, 0);
 
     return (
-        <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-100 text-slate-800 overflow-hidden font-sans">
+
+
+        <div className="flex flex-col h-[calc(100vh-4rem)] bg-stone-100 text-slate-800 overflow-hidden font-sans">
 
             {/* ENCABEZADO PRINCIPAL CON NAVEGACIÓN Y ACCESOS */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center px-3 pt-3 pb-1 shrink-0 gap-2">

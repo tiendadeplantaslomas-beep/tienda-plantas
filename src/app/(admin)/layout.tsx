@@ -29,11 +29,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }, []);
 
     return (
-        <div className="h-screen w-screen bg-slate-100/60 text-slate-800 flex flex-col items-center overflow-hidden p-2">
+        <div
+            className="h-screen w-screen text-slate-800 flex flex-col items-center overflow-hidden p-2 bg-cover bg-center"
+            style={{
+                backgroundImage: "linear-gradient(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.88)), url('/FONDO.jpg')"
+            }}
+        >
             <div className="w-full max-w-7xl h-full flex flex-col justify-between overflow-hidden gap-1">
 
                 {/* ENCABEZADO GLOBAL */}
-                <header className="w-full shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 py-2 px-3 border border-slate-200 bg-white rounded-md shadow-2xs">
+                <header className="w-full shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 py-2 px-3 border border-slate-200 bg-white/90 backdrop-blur-xs rounded-md shadow-2xs">
                     <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-white border border-slate-200 overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
                             <img
@@ -85,13 +90,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </div>
                 </header>
 
-                {/* CONTENIDO PRINCIPAL (Ocupa exactamente el espacio libre sin pisar el footer) */}
+                {/* CONTENIDO PRINCIPAL */}
                 <main className="w-full flex-1 min-h-0 flex flex-col overflow-hidden relative">
                     {children}
                 </main>
 
                 {/* PIE DE PÁGINA GLOBAL */}
-                <footer className="w-full shrink-0 py-1 px-3 border border-slate-200 bg-white rounded-md shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-1 text-[10px] text-slate-500 font-medium">
+                <footer className="w-full shrink-0 py-1 px-3 border border-slate-200 bg-white/90 backdrop-blur-xs rounded-md shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-1 text-[10px] text-slate-500 font-medium">
                     <div>
                         <span>Tienda de Plantas ERP / CRM &copy; {new Date().getFullYear()}</span>
                         <span className="hidden sm:inline"> &bull; Todos los derechos reservados</span>

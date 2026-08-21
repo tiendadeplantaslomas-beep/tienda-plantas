@@ -144,16 +144,19 @@ model PurchaseItem {
 // CLIENTES
 // -------------------------------------------------------------
 model Customer {
-  id        String    @id @default(cuid())
-  name      String
-  email     String?   @unique
-  phone     String?
-  address   String?   
-  notes     String?   
-  sales     Sale[]    
-  payments  Payment[] 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now()) @updatedAt
+  id                 String    @id @default(cuid())
+  name               String
+  email              String    @unique
+  password_hash      String
+  phone              String
+  address            String
+  dni_cuit           String
+  gender             String?   @default("neutral") // Agregamos esto
+  image_url          String?   // Agregamos esto para la foto
+  email_verified     Int       @default(0)
+  verification_token String?
+  origin             String    @default("tienda")
+  created_at         DateTime  @default(now())
 }
 
 // -------------------------------------------------------------

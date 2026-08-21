@@ -93,9 +93,11 @@ export default function ComprasPosPage() {
     const totalUnits = cart.reduce((acc, item) => acc + item.quantity, 0);
 
     return (
-        <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-100 text-slate-800 overflow-hidden font-sans">
+
+        <div className="flex flex-col h-[calc(100vh-4rem)] bg-stone-100 text-slate-800 overflow-hidden font-sans">
 
             {/* CUERPO PRINCIPAL EN 3 COLUMNAS PARA COMPRAS */}
+
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 overflow-hidden">
 
                 {/* COLUMNA IZQUIERDA: ESTADOS Y PROVEEDOR */}

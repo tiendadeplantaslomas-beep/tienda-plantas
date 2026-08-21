@@ -39,7 +39,7 @@ export default function StockPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('todos');
     const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
-    const [editStockValue, setEditStockValue] = useState<number>(0);
+    const [editStockValue, setEditStockValue] = useState<number | ''>(0);
 
     // Estados para el Modal de Nuevo Producto / Planta
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,19 +49,19 @@ export default function StockPage() {
     const [newImageUrl, setNewImageUrl] = useState('');
     const [newCategoryId, setNewCategoryId] = useState('');
     const [newSupplierId, setNewSupplierId] = useState('');
-    const [newCost, setNewCost] = useState(0);
-    const [newOtherCosts, setNewOtherCosts] = useState(0);
-    const [newPrice, setNewPrice] = useState(0);
-    const [newMargin, setNewMargin] = useState(30);
+    const [newCost, setNewCost] = useState<number | ''>(0);
+    const [newOtherCosts, setNewOtherCosts] = useState<number | ''>(0);
+    const [newPrice, setNewPrice] = useState<number | ''>(0);
+    const [newMargin, setNewMargin] = useState<number | ''>('');
     const [newTaxRate, setNewTaxRate] = useState<number>(0);
-    const [newStock, setNewStock] = useState(0);
-    const [newMinStock, setNewMinStock] = useState(2);
+    const [newStock, setNewStock] = useState<number | ''>(0);
+    const [newMinStock, setNewMinStock] = useState<number | ''>('');
     const [newTrackStock, setNewTrackStock] = useState(true);
 
     // Formularios Inline para Categoría y Proveedor
     const [isCreatingCategory, setIsCreatingCategory] = useState(false);
     const [inlineCategoryName, setInlineCategoryName] = useState('');
-    const [inlineCategoryMargin, setInlineCategoryMargin] = useState(30);
+    const [inlineCategoryMargin, setInlineCategoryMargin] = useState<number | ''>('');
 
     const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
     const [inlineSupplierName, setInlineSupplierName] = useState('');
@@ -80,8 +80,10 @@ export default function StockPage() {
 
     // Cálculo automático del precio de venta incluyendo Costos, Margen e IVA
     useEffect(() => {
-        const totalCost = Number(newCost || 0) + Number(newOtherCosts || 0);
-        const marginDecimal = Number(newMargin || 0) / 100;
+        const costVal = newCost === '' ? 0 : Number(newCost);
+        const otherCostVal = newOtherCosts === '' ? 0 : Number(newOtherCosts);
+        const totalCost = costVal + otherCostVal;
+        const marginDecimal = newMargin !== '' ? Number(newMargin) / 100 : 0;
         const taxMultiplier = 1 + (Number(newTaxRate || 0) / 100);
 
         if (marginDecimal >= 0) {
@@ -102,17 +104,6 @@ export default function StockPage() {
             setCategories(catsData);
             setSuppliers(suppsData);
 
-            if (catsData && catsData.length > 0 && !newCategoryId) {
-                const firstCat = catsData[0];
-                setNewCategoryId(firstCat.id);
-                setNewMargin(firstCat.defaultMargin ?? 30);
-                const code = await generateNextProductCode(firstCat.id);
-                setNewCode(code);
-            }
-            if (suppsData && suppsData.length > 0 && !newSupplierId) {
-                setNewSupplierId(suppsData[0].id);
-            }
-
             if (prodsData && (prodsData as any[]).length > 0) {
                 const list = prodsData as any[];
                 if (!selectedProduct) {
@@ -130,47 +121,61 @@ export default function StockPage() {
     const handleCategoryChange = async (catId: string) => {
         setNewCategoryId(catId);
         const found = categories.find(c => c.id === catId);
-        if (found && found.defaultMargin !== undefined) {
+        if (found && found.defaultMargin !== undefined && found.defaultMargin !== null) {
             setNewMargin(Math.round(found.defaultMargin));
+        } else {
+            setNewMargin('');
         }
         const generatedCode = await generateNextProductCode(catId);
         setNewCode(generatedCode);
     };
 
-    const handleOpenModal = async () => {
-        setIsModalOpen(true);
-        if (categories.length > 0 && !newCategoryId) {
-            const firstCat = categories[0];
-            setNewCategoryId(firstCat.id);
-            setNewMargin(firstCat.defaultMargin ?? 30);
-            const code = await generateNextProductCode(firstCat.id);
-            setNewCode(code);
-        } else if (newCategoryId) {
-            const code = await generateNextProductCode(newCategoryId);
-            setNewCode(code);
-        }
-    };
-
-    const handleCloseModal = async () => {
-        setIsModalOpen(false);
+    const handleOpenModal = () => {
+        setNewCode('');
         setNewName('');
         setNewDescription('');
         setNewImageUrl('');
+        setNewCategoryId('');
+        setNewSupplierId('');
         setNewCost(0);
         setNewOtherCosts(0);
         setNewPrice(0);
-        setNewMargin(30);
+        setNewMargin('');
         setNewTaxRate(0);
         setNewStock(0);
-        setNewMinStock(2);
+        setNewMinStock('');
         setNewTrackStock(true);
         setIsCreatingCategory(false);
         setIsCreatingSupplier(false);
+        setInlineCategoryName('');
+        setInlineSupplierName('');
+        setInlineSupplierPhone('');
+        setInlineSupplierAddress('');
+        setIsModalOpen(true);
+    };
 
-        if (newCategoryId) {
-            const code = await generateNextProductCode(newCategoryId);
-            setNewCode(code);
-        }
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setNewCode('');
+        setNewName('');
+        setNewDescription('');
+        setNewImageUrl('');
+        setNewCategoryId('');
+        setNewSupplierId('');
+        setNewCost(0);
+        setNewOtherCosts(0);
+        setNewPrice(0);
+        setNewMargin('');
+        setNewTaxRate(0);
+        setNewStock(0);
+        setNewMinStock('');
+        setNewTrackStock(true);
+        setIsCreatingCategory(false);
+        setIsCreatingSupplier(false);
+        setInlineCategoryName('');
+        setInlineSupplierName('');
+        setInlineSupplierPhone('');
+        setInlineSupplierAddress('');
     };
 
     const handleSaveInlineCategory = async () => {
@@ -178,17 +183,17 @@ export default function StockPage() {
         try {
             const res = await createCategory({
                 name: inlineCategoryName.trim(),
-                defaultMargin: Math.round(Number(inlineCategoryMargin))
+                defaultMargin: inlineCategoryMargin !== '' ? Math.round(Number(inlineCategoryMargin)) : 0
             });
             if (res.success && res.category) {
                 const updatedCats = await getCategories();
                 setCategories(updatedCats);
                 setNewCategoryId(res.category.id);
-                setNewMargin(Math.round(res.category.defaultMargin));
+                setNewMargin(res.category.defaultMargin !== undefined ? Math.round(res.category.defaultMargin) : '');
                 const code = await generateNextProductCode(res.category.id);
                 setNewCode(code);
                 setInlineCategoryName('');
-                setInlineCategoryMargin(30);
+                setInlineCategoryMargin('');
                 setIsCreatingCategory(false);
             } else {
                 alert(res.error || 'Error al crear la categoría');
@@ -236,8 +241,9 @@ export default function StockPage() {
 
     const handleUpdateStock = async () => {
         if (!selectedProduct) return;
+        const valToSave = editStockValue === '' ? 0 : Math.round(Number(editStockValue));
         try {
-            const res = await adjustStock(selectedProduct.id, Math.round(Number(editStockValue)), 'ADJUSTMENT');
+            const res = await adjustStock(selectedProduct.id, valToSave, 'ADJUSTMENT');
             if (res.success) {
                 await loadData();
                 alert('¡Stock actualizado con éxito!');
@@ -265,13 +271,13 @@ export default function StockPage() {
                 imageUrl: newImageUrl.trim() || undefined,
                 categoryId: newCategoryId,
                 supplierId: newSupplierId || undefined,
-                cost: Math.round(Number(newCost)),
-                otherCosts: Math.round(Number(newOtherCosts)),
-                price: Math.round(Number(newPrice)),
-                margin: Math.round(Number(newMargin)),
+                cost: newCost === '' ? 0 : Math.round(Number(newCost)),
+                otherCosts: newOtherCosts === '' ? 0 : Math.round(Number(newOtherCosts)),
+                price: newPrice === '' ? 0 : Math.round(Number(newPrice)),
+                margin: newMargin !== '' ? Math.round(Number(newMargin)) : 0,
                 taxRate: Number(newTaxRate),
-                stock: Math.round(Number(newStock)),
-                minStock: Math.round(Number(newMinStock)),
+                stock: newStock === '' ? 0 : Math.round(Number(newStock)),
+                minStock: newMinStock !== '' ? Math.round(Number(newMinStock)) : 2,
                 trackStock: Boolean(newTrackStock)
             });
 
@@ -286,6 +292,30 @@ export default function StockPage() {
             console.error('Error al crear producto:', error);
             alert('Error de conexión al crear el producto');
         }
+    };
+
+    // Renderiza la imagen del producto o la imagen por defecto sinfoto.png
+    const renderProductImage = (url?: string | null, size: 'sm' | 'md' | 'lg' = 'sm') => {
+        const dimClass = size === 'sm' ? 'w-6 h-6' : size === 'md' ? 'w-8 h-8' : 'w-full h-44';
+
+        // Filtramos strings literales "undefined" o "null" que a veces se cuelan en la BD
+        const isValidUrl = url && url.trim() !== '' && url !== 'undefined' && url !== 'null';
+        const imageSrc = isValidUrl ? url : '/sinfoto.png';
+
+        return (
+            <img
+                src={imageSrc}
+                alt="Imagen del producto"
+                // Si la imagen falla por cualquier razón, forzamos la carga de sinfoto.png
+                onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    if (target.src !== window.location.origin + '/sinfoto.png') {
+                        target.src = '/sinfoto.png';
+                    }
+                }}
+                className={`${dimClass} ${size === 'lg' ? 'object-contain p-1' : 'object-cover'} rounded border border-slate-200 bg-slate-50 shrink-0 select-none`}
+            />
+        );
     };
 
     const filteredProducts = useMemo(() => {
@@ -304,12 +334,18 @@ export default function StockPage() {
     const totalInventoryValue = products.reduce((acc, p) => acc + ((p.cost || 0) * (p.stock || 0)), 0);
 
     return (
-        <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-100 text-slate-800 overflow-hidden font-sans relative">
-
+        /*<div className="flex flex-col h-[calc(100vh-4rem)] bg-[url('/FONDO.jpg')] bg-repeat bg-blend-overlay bg-slate-100/95 text-slate-800 overflow-hidden font-sans relative">*/
+        <div className="bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6 space-y-4">
             {/* MODAL COMPACTO PARA NUEVO PRODUCTO / PLANTA */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2">
-                    <div className="bg-white rounded-xl max-w-md w-full max-h-[96vh] flex flex-col shadow-2xl">
+                <div
+                    className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2"
+                    onClick={handleCloseModal}
+                >
+                    <div
+                        className="bg-white rounded-xl max-w-md w-full max-h-[96vh] flex flex-col shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <div className="flex justify-between items-center border-b border-slate-100 px-4 py-3 pb-2">
                             <h3 className="text-xs font-black uppercase text-slate-900 tracking-wider">
                                 ➕ Registrar Nuevo Producto / Planta
@@ -351,8 +387,8 @@ export default function StockPage() {
                                                 type="number"
                                                 step="1"
                                                 value={inlineCategoryMargin}
-                                                onChange={(e) => setInlineCategoryMargin(Math.round(Number(e.target.value)))}
-                                                className="w-full border border-slate-200 rounded p-1 bg-white font-mono text-xs"
+                                                onChange={(e) => setInlineCategoryMargin(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+                                                className="w-full border border-slate-200 rounded p-1 bg-white font-mono text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                             />
                                         </div>
                                         <button
@@ -370,6 +406,7 @@ export default function StockPage() {
                                         className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-bold uppercase text-xs"
                                         required
                                     >
+                                        <option value="" disabled>-- SELECCIONAR CATEGORÍA --</option>
                                         {categories.map(cat => (
                                             <option key={cat.id} value={cat.id}>
                                                 {cat.name}
@@ -430,7 +467,7 @@ export default function StockPage() {
                                         onChange={(e) => setNewSupplierId(e.target.value)}
                                         className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 uppercase text-xs"
                                     >
-                                        <option value="">-- SIN PROVEEDOR ASIGNADO --</option>
+                                        <option value="">-- SELECCIONAR PROVEEDOR --</option>
                                         {suppliers.map(supp => (
                                             <option key={supp.id} value={supp.id}>{supp.name}</option>
                                         ))}
@@ -472,9 +509,9 @@ export default function StockPage() {
                                         onChange={handleImageUpload}
                                         className="w-full border border-slate-200 rounded p-1 bg-slate-50 text-[11px] cursor-pointer"
                                     />
-                                    {newImageUrl && (
-                                        <img src={newImageUrl} alt="Preview" className="w-8 h-8 rounded object-cover border border-slate-200 shrink-0" />
-                                    )}
+                                    <div className="w-8 h-8 shrink-0">
+                                        {renderProductImage(newImageUrl, 'md')}
+                                    </div>
                                 </div>
                             </div>
 
@@ -497,8 +534,8 @@ export default function StockPage() {
                                         step="1"
                                         required
                                         value={newCost}
-                                        onChange={(e) => setNewCost(Math.round(Number(e.target.value)))}
-                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono text-xs"
+                                        onChange={(e) => setNewCost(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                 </div>
                                 <div>
@@ -507,8 +544,8 @@ export default function StockPage() {
                                         type="number"
                                         step="1"
                                         value={newOtherCosts}
-                                        onChange={(e) => setNewOtherCosts(Math.round(Number(e.target.value)))}
-                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono text-xs"
+                                        onChange={(e) => setNewOtherCosts(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                 </div>
                             </div>
@@ -520,8 +557,9 @@ export default function StockPage() {
                                         type="number"
                                         step="1"
                                         value={newMargin}
-                                        onChange={(e) => setNewMargin(Math.round(Number(e.target.value)))}
-                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono font-bold text-amber-700 text-xs"
+                                        onChange={(e) => setNewMargin(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+                                        placeholder=""
+                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono font-bold text-amber-700 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                 </div>
                                 <div>
@@ -542,8 +580,8 @@ export default function StockPage() {
                                         type="number"
                                         step="1"
                                         value={newPrice}
-                                        onChange={(e) => setNewPrice(Math.round(Number(e.target.value)))}
-                                        className="w-full border border-emerald-300 rounded p-1.5 bg-emerald-50 font-mono text-emerald-900 font-bold text-xs"
+                                        onChange={(e) => setNewPrice(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+                                        className="w-full border border-emerald-300 rounded p-1.5 bg-emerald-50 font-mono text-emerald-900 font-bold text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                 </div>
                             </div>
@@ -556,8 +594,8 @@ export default function StockPage() {
                                         step="1"
                                         required
                                         value={newStock}
-                                        onChange={(e) => setNewStock(Math.round(Number(e.target.value)))}
-                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono text-xs"
+                                        onChange={(e) => setNewStock(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                 </div>
                                 <div>
@@ -565,10 +603,10 @@ export default function StockPage() {
                                     <input
                                         type="number"
                                         step="1"
-                                        required
                                         value={newMinStock}
-                                        onChange={(e) => setNewMinStock(Math.round(Number(e.target.value)))}
-                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono text-amber-600 font-bold text-xs"
+                                        onChange={(e) => setNewMinStock(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+                                        placeholder=""
+                                        className="w-full border border-slate-200 rounded p-1.5 bg-slate-50 font-mono text-amber-600 font-bold text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                 </div>
                                 <div className="flex flex-col justify-end pb-0.5">
@@ -609,7 +647,7 @@ export default function StockPage() {
 
                 {/* COLUMNA IZQUIERDA: FILTROS Y RESUMEN */}
                 <div className="lg:col-span-3 hidden lg:flex flex-col gap-3 shrink-0">
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2">
+                    <div className="bg-white/95 backdrop-blur-xs p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2">
                         <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100 pb-1">
                             Filtros de Inventario
                         </h3>
@@ -629,7 +667,7 @@ export default function StockPage() {
                         </div>
                     </div>
 
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs flex-1">
+                    <div className="bg-white/95 backdrop-blur-xs p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs flex-1">
                         <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100 pb-1">
                             Resumen General
                         </h3>
@@ -652,7 +690,7 @@ export default function StockPage() {
 
                 {/* COLUMNA CENTRAL: BUSCADOR Y GRILLA DE STOCK */}
                 <div className="lg:col-span-6 flex flex-col gap-3 h-full overflow-hidden">
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm shrink-0">
+                    <div className="bg-white/95 backdrop-blur-xs p-3 rounded-xl border border-slate-200 shadow-sm shrink-0">
                         <div className="flex items-center gap-2">
                             <input
                                 type="text"
@@ -667,10 +705,10 @@ export default function StockPage() {
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-2xs flex-1 flex flex-col overflow-hidden">
+                    <div className="bg-white/95 backdrop-blur-xs rounded-xl border border-slate-200 shadow-2xs flex-1 flex flex-col overflow-hidden">
                         <div className="overflow-x-auto flex-1">
                             <table className="w-full text-left text-xs border-collapse">
-                                <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-10">
+                                <thead className="bg-slate-50/9imodal text-[10px] uppercase text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-10">
                                     <tr>
                                         <th className="p-2.5">Código</th>
                                         <th className="p-2.5">Planta / Producto</th>
@@ -694,13 +732,13 @@ export default function StockPage() {
                                                 <tr
                                                     key={p.id}
                                                     onClick={() => setSelectedProduct(p)}
-                                                    className={`hover:bg-slate-50 cursor-pointer ${selectedProduct?.id === p.id ? 'bg-slate-100/80 font-bold' : ''}`}
+                                                    className={`hover:bg-slate-50/80 cursor-pointer ${selectedProduct?.id === p.id ? 'bg-slate-100 font-bold' : ''}`}
                                                 >
                                                     <td className="p-2.5 font-mono text-slate-600">{p.code}</td>
                                                     <td className="p-2.5 text-slate-800 uppercase flex items-center gap-2">
-                                                        {p.imageUrl && (
-                                                            <img src={p.imageUrl} alt="" className="w-6 h-6 rounded object-cover border border-slate-200" />
-                                                        )}
+                                                        <div className="w-6 h-6 shrink-0">
+                                                            {renderProductImage(p.imageUrl, 'sm')}
+                                                        </div>
                                                         {p.name}
                                                     </td>
                                                     <td className="p-2.5 text-center">
@@ -722,17 +760,15 @@ export default function StockPage() {
 
                 {/* COLUMNA DERECHA: DETALLE Y AJUSTE RÁPIDO DE STOCK */}
                 <div className="lg:col-span-3 flex flex-col gap-3 shrink-0">
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-3 text-xs">
+                    <div className="bg-white/95 backdrop-blur-xs p-3 rounded-xl border border-slate-200 shadow-2xs space-y-3 text-xs">
                         <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100 pb-1">
                             Detalle de Selección
                         </h3>
                         {selectedProduct ? (
                             <div className="space-y-3">
-                                {selectedProduct.imageUrl && (
-                                    <div className="w-full h-32 bg-slate-50 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
-                                        <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-full h-full object-cover" />
-                                    </div>
-                                )}
+                                <div className="w-full h-44 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center relative">
+                                    {renderProductImage(selectedProduct.imageUrl, 'lg')}
+                                </div>
                                 <div>
                                     <span className="text-[10px] font-bold text-slate-400 uppercase">Producto Seleccionado:</span>
                                     <p className="font-bold text-slate-800 text-sm uppercase mt-0.5">{selectedProduct.name}</p>
@@ -760,7 +796,7 @@ export default function StockPage() {
                                             type="number"
                                             step="1"
                                             value={editStockValue}
-                                            onChange={(e) => setEditStockValue(Math.round(Number(e.target.value)))}
+                                            onChange={(e) => setEditStockValue(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
                                             className="w-full border border-slate-200 rounded p-1.5 font-mono font-bold bg-slate-50 outline-none text-center text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         />
                                         <button
@@ -777,7 +813,7 @@ export default function StockPage() {
                         )}
                     </div>
 
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5 flex-1 flex flex-col justify-end">
+                    <div className="bg-white/95 backdrop-blur-xs p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5 flex-1 flex flex-col justify-end">
                         <button
                             onClick={handleOpenModal}
                             className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs uppercase shadow-sm transition-colors cursor-pointer"

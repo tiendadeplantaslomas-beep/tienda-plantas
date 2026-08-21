@@ -18,7 +18,7 @@ import {
 } from '@/actions/product-actions';
 
 // ----------------------------------------------------------------------
-// COMPONENTES AUXILIARES INLINE (Proveedor)
+// COMPONENTE AUXILIAR INLINE (Proveedor)
 // ----------------------------------------------------------------------
 
 function SupplierInlineForm({
@@ -58,7 +58,7 @@ function SupplierInlineForm({
         <div className="absolute top-7 left-0 w-80 z-50 bg-emerald-50 text-emerald-950 p-2.5 rounded-lg border border-emerald-300 space-y-2 shadow-xl animate-in fade-in">
             <div className="flex justify-between items-center text-[10px] font-bold text-emerald-800 uppercase">
                 <span>🚚 Nuevo Proveedor Inline</span>
-                <button type="button" onClick={onClose} className="text-emerald-700 hover:text-emerald-950 font-bold">✕</button>
+                <button type="button" onClick={onClose} className="text-emerald-700 hover:text-emerald-950 font-bold cursor-pointer">✕</button>
             </div>
             <div className="flex gap-1.5 items-center">
                 <input
@@ -78,7 +78,7 @@ function SupplierInlineForm({
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                     className="w-20 bg-white border border-emerald-300 rounded px-1.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
-                <button type="button" onClick={handleSubmit} className="bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-bold rounded text-white shadow-sm shrink-0">
+                <button type="button" onClick={handleSubmit} className="bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-bold rounded text-white shadow-sm shrink-0 cursor-pointer">
                     ✓
                 </button>
             </div>
@@ -94,6 +94,9 @@ function SupplierInlineForm({
 export default function ProductosPage() {
     const [fechaActual, setFechaActual] = useState('');
     const [tabActiva, setTabActiva] = useState('catalogo');
+
+    // Constante para el límite de tamaño de imagen (2 MB)
+    const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
     // Estados de datos principales
     const [categories, setCategories] = useState<Category[]>([]);
@@ -141,6 +144,8 @@ export default function ProductosPage() {
     const [taxRate, setTaxRate] = useState<number>(21);
     const [stock, setStock] = useState<number | ''>(0);
     const [minStock, setMinStock] = useState<number | ''>(2);
+    const [imageUrl, setImageUrl] = useState('');
+    const [imageError, setImageError] = useState<string | null>(null); // Estado para error de imagen
 
     // Mensajería Global
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -231,6 +236,8 @@ export default function ProductosPage() {
         setTaxRate(21);
         setStock(0);
         setMinStock(2);
+        setImageUrl('');
+        setImageError(null);
     };
 
     const loadData = async () => {
@@ -313,6 +320,8 @@ export default function ProductosPage() {
         setPriceFinal(prod.price);
         setStock(prod.stock);
         setMinStock(prod.minStock);
+        setImageUrl(prod.imageUrl || '');
+        setImageError(null);
 
         setShowProductForm(true);
         setTimeout(() => {
@@ -350,6 +359,28 @@ export default function ProductosPage() {
         }
     };
 
+    // Manejador seguro con actualización de error local para la imagen (máx 2 MB)
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (file.size > MAX_FILE_SIZE) {
+            const currentSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            const errorMsg = `La imagen pesa ${currentSizeMB} MB. El tamaño máximo permitido es de 2 MB.`;
+            setImageError(errorMsg);
+            setMessage({ type: 'error', text: errorMsg });
+            e.target.value = '';
+            return;
+        }
+
+        setImageError(null);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setImageUrl(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+    };
+
     const calculatedNewStock = useMemo(() => {
         if (!selectedProductForStock) return 0;
         const current = selectedProductForStock.stock;
@@ -367,7 +398,7 @@ export default function ProductosPage() {
             return;
         }
 
-        const headers = ['Codigo', 'Nombre', 'Categoria', 'Proveedor', 'CostoBase', 'FleteOtros', 'Margen', 'IVA', 'PrecioFinal', 'Stock', 'StockMinimo'];
+        const headers = ['Codigo', 'Nombre', 'Categoria', 'Proveedor', 'CostoBase', 'FleteOtros', 'Margen', 'IVA', 'PrecioFinal', 'Stock', 'StockMinimo', 'ImagenUrl'];
         const rows = products.map(p => [
             `"${p.code || ''}"`,
             `"${p.name || ''}"`,
@@ -379,7 +410,8 @@ export default function ProductosPage() {
             p.taxRate || 0,
             p.price || 0,
             p.stock || 0,
-            p.minStock || 0
+            p.minStock || 0,
+            `"${p.imageUrl || ''}"`
         ]);
 
         const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
@@ -505,7 +537,7 @@ export default function ProductosPage() {
 
     return (
         <div className="w-full min-h-[calc(100vh-4rem)] flex flex-col font-sans text-slate-800 pb-4 max-w-7xl mx-auto">
-            <div className="flex flex-col gap-2 flex-1">
+            <div className="bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6 space-y-4">
 
                 {/* ENCABEZADO Y ACCIONES */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center px-0.5 gap-1 shrink-0">
@@ -572,7 +604,7 @@ export default function ProductosPage() {
 
                 {/* TARJETAS DE RESUMEN MÉTRICAS */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
-                    <div className="bg-white p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
+                    <div className="bg-white/90 backdrop-blur-xs p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
                         <div className="p-1.5 bg-slate-100 rounded text-sm">📦</div>
                         <div>
                             <p className="text-[9px] font-bold text-slate-400 uppercase">Items Registrados</p>
@@ -580,7 +612,7 @@ export default function ProductosPage() {
                         </div>
                     </div>
 
-                    <div className="bg-white p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
+                    <div className="bg-white/90 backdrop-blur-xs p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
                         <div className="p-1.5 bg-emerald-50 text-emerald-700 rounded text-sm">💵</div>
                         <div>
                             <p className="text-[9px] font-bold text-slate-400 uppercase">Valor Neto Stock</p>
@@ -588,7 +620,7 @@ export default function ProductosPage() {
                         </div>
                     </div>
 
-                    <div className="bg-white p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
+                    <div className="bg-white/90 backdrop-blur-xs p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
                         <div className="p-1.5 bg-slate-100 rounded text-sm">📄</div>
                         <div>
                             <p className="text-[9px] font-bold text-slate-400 uppercase">Impuestos Implícitos</p>
@@ -596,7 +628,7 @@ export default function ProductosPage() {
                         </div>
                     </div>
 
-                    <div className="bg-white p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
+                    <div className="bg-white/90 backdrop-blur-xs p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
                         <div className="p-1.5 bg-amber-50 text-amber-700 rounded text-sm">⚠️</div>
                         <div>
                             <p className="text-[9px] font-bold text-slate-400 uppercase">Alertas Reposición</p>
@@ -685,7 +717,7 @@ export default function ProductosPage() {
 
                 {/* FORMULARIO DE EDICIÓN Y ALTA DE PRODUCTO */}
                 {showProductForm && (
-                    <div ref={formRef} className="bg-white p-3 rounded-md border border-emerald-500 shadow-sm animate-in fade-in space-y-3 shrink-0">
+                    <div ref={formRef} className="bg-stone-50 dark:bg-stone-900 p-6 rounded-xl shadow-md border border-stone-200 dark:border-stone-800">
                         <div className="flex justify-between items-center border-b pb-1.5">
                             <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
                                 <span>{id ? '✏️' : '🌱'}</span>
@@ -718,7 +750,8 @@ export default function ProductosPage() {
                                 margin: Number(margin) || 0,
                                 taxRate: Number(taxRate) || 0,
                                 stock: Number(stock) || 0,
-                                minStock: Number(minStock) || 0
+                                minStock: Number(minStock) || 0,
+                                imageUrl: imageUrl.trim() || '/sinfoto.png'
                             });
 
                             if (res.error) {
@@ -730,6 +763,42 @@ export default function ProductosPage() {
                                 loadData();
                             }
                         }} className="space-y-2.5">
+
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
+                                {/* VISTA PREVIA DE IMAGEN EN FORMULARIO */}
+                                <div className="flex flex-col items-center justify-center p-1 bg-slate-50 border border-slate-200 rounded">
+                                    <span className="block text-[8px] font-bold text-slate-500 uppercase mb-1">Vista Previa</span>
+                                    <div className="w-14 h-14 relative rounded overflow-hidden border border-slate-300 bg-white flex items-center justify-center">
+                                        <img
+                                            src={imageUrl.trim() || '/sinfoto.png'}
+                                            alt="Vista previa"
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).src = '/sinfoto.png';
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* SELECTOR DE ARCHIVO (UPLOAD) */}
+                                <div className="md:col-span-3">
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Subir Imagen desde la PC (Opcional)</label>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageChange}
+                                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] text-slate-700 file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[9px] file:font-bold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100 cursor-pointer"
+                                    />
+                                    {imageError && (
+                                        <p className="text-[10px] text-rose-600 font-bold mt-1 flex items-center gap-1">
+                                            <span>⚠️</span> {imageError}
+                                        </p>
+                                    )}
+                                    <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                                        Tamaño máximo permitido: <strong className="text-stone-700 dark:text-stone-300">2 MB</strong>. Formatos: <span className="font-medium">JPG, PNG o WebP</span>. Seleccioná una foto de tus especies. Si no elegís ninguna, se asignará <code>sinfoto</code> por defecto.
+                                    </p>
+                                </div>
+                            </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                                 {/* CATEGORÍA AUTOCOMPLETE CON INLINE */}
@@ -1118,7 +1187,7 @@ export default function ProductosPage() {
                                 <p>Seleccioná un archivo en formato <strong>CSV</strong> o <strong>JSON</strong> con el catálogo.</p>
                                 <div className="p-2 bg-slate-50 rounded border border-slate-200 text-[9px] font-mono leading-tight">
                                     Encabezados CSV:<br />
-                                    <code>Codigo, Nombre, Categoria, Proveedor, CostoBase, FleteOtros, Margen, IVA, PrecioFinal, Stock, StockMinimo</code>
+                                    <code>Codigo, Nombre, Categoria, Proveedor, CostoBase, FleteOtros, Margen, IVA, PrecioFinal, Stock, StockMinimo, ImagenUrl</code>
                                 </div>
                             </div>
 
@@ -1153,8 +1222,7 @@ export default function ProductosPage() {
                 )}
 
                 {/* TABLA PRINCIPAL Y PESTAÑAS */}
-                <div className="bg-white border border-slate-200/80 rounded-md shadow-2xs overflow-hidden flex flex-col flex-1 min-h-[380px]">
-
+                <div className="bg-stone-50 dark:bg-stone-900 p-6 rounded-xl shadow-md border border-stone-200 dark:border-stone-800">
                     {/* BARRA DE PESTAÑAS Y BÚSQUEDA */}
                     <div className="p-2 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2 shrink-0">
 
@@ -1218,6 +1286,7 @@ export default function ProductosPage() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-100/70 border-b border-slate-200 text-[9px] font-extrabold text-slate-600 uppercase tracking-wider select-none">
+                                    <th className="py-2 px-2.5 text-center">Img</th>
                                     <th onClick={() => handleSort('code')} className="py-2 px-2.5 cursor-pointer hover:bg-slate-200/50 transition-colors">
                                         Código {sortField === 'code' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
                                     </th>
@@ -1242,13 +1311,13 @@ export default function ProductosPage() {
                             <tbody className="divide-y divide-slate-100 text-[10px]">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
+                                        <td colSpan={10} className="py-12 text-center text-slate-400 font-medium">
                                             Cargando catálogo...
                                         </td>
                                     </tr>
                                 ) : paginatedProducts.length === 0 ? (
                                     <tr>
-                                        <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
+                                        <td colSpan={10} className="py-12 text-center text-slate-400 font-medium">
                                             {searchTerm ? 'Sin coincidencias con la búsqueda.' : 'No hay productos registrados.'}
                                         </td>
                                     </tr>
@@ -1258,7 +1327,19 @@ export default function ProductosPage() {
                                         const isLowStock = prod.stock <= prod.minStock;
 
                                         return (
-                                            <tr key={prod.id} className="hover:bg-slate-50 transition-colors">
+                                            <tr key={prod.id} className="hover:bg-slate-50/80 transition-colors">
+                                                <td className="py-2 px-2.5 text-center">
+                                                    <div className="w-8 h-8 mx-auto relative rounded overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
+                                                        <img
+                                                            src={prod.imageUrl?.trim() || '/sinfoto.png'}
+                                                            alt={prod.name}
+                                                            className="w-full h-full object-cover"
+                                                            onError={(e) => {
+                                                                (e.target as HTMLImageElement).src = '/sinfoto.png';
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </td>
                                                 <td className="py-2 px-2.5 font-mono font-bold text-slate-600">
                                                     {prod.code}
                                                 </td>

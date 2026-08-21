@@ -1,30 +1,49 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Leaf, ShoppingCart, User, Menu } from 'lucide-react';
+import { Leaf, ShoppingCart, User, Menu, LogOut } from 'lucide-react';
 
 export default function Navbar() {
+    const [customer, setCustomer] = useState<any>(null);
+
+    useEffect(() => {
+        // Lee el cliente guardado en el navegador tras el login
+        const data = localStorage.getItem('customer');
+        if (data) {
+            try {
+                setCustomer(JSON.parse(data));
+            } catch (e) {
+                console.error("Error al leer el customer del localStorage", e);
+            }
+        }
+    }, []);
+
+    const handleLogout = () => {
+        localStorage.removeItem('customer');
+        setCustomer(null);
+        window.location.href = '/tienda';
+    };
+
     return (
         <header className="sticky top-0 z-50 w-full border-b border-stone-200 bg-white/95 backdrop-blur-sm">
             <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
 
                 {/* Logo / Nombre del Negocio */}
-                <Link href="/" className="flex items-center gap-2 font-semibold text-emerald-800 transition hover:opacity-90">
+                <Link href="/tienda" className="flex items-center gap-2 font-semibold text-emerald-800 transition hover:opacity-90">
                     <Leaf className="h-6 w-6 text-emerald-600" />
                     <span className="text-lg tracking-tight font-bold">Tienda de Plantas Lomas</span>
                 </Link>
 
-                {/* Enlaces de Navegación (Categorías rápidas) */}
+                {/* Enlaces de Navegación */}
                 <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-stone-600">
-                    <Link href="/categoria/plantas" className="transition hover:text-emerald-700">Plantas</Link>
-                    <Link href="/categoria/sustratos" className="transition hover:text-emerald-700">Sustratos</Link>
-                    <Link href="/categoria/macetas" className="transition hover:text-emerald-700">Macetas</Link>
+                    <Link href="/tienda/categoria/plantas" className="transition hover:text-emerald-700">Plantas</Link>
+                    <Link href="/tienda/categoria/sustratos" className="transition hover:text-emerald-700">Sustratos</Link>
+                    <Link href="/tienda/categoria/macetas" className="transition hover:text-emerald-700">Macetas</Link>
                 </nav>
 
-                {/* Botones de Acción (Carrito y Usuario) */}
+                {/* Botones de Acción */}
                 <div className="flex items-center gap-4">
-                    {/* Botón Carrito */}
                     <button className="relative p-2 text-stone-600 hover:text-emerald-700 transition" aria-label="Ver carrito">
                         <ShoppingCart className="h-5.5 w-5.5" />
                         <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
@@ -32,14 +51,29 @@ export default function Navbar() {
                         </span>
                     </button>
 
-                    {/* Botón Mi Cuenta */}
-                    <Link href="/login" className="flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-emerald-50 hover:text-emerald-800 transition">
-                        <User className="h-4 w-4" />
-                        <span className="hidden sm:inline">Mi Cuenta</span>
-                    </Link>
+                    {/* Si está logueado muestra el saludo y salir, sino muestra Mi Cuenta */}
+                    {customer ? (
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm font-medium text-stone-700">
+                                Hola, <b>{customer.name.split(' ')[0]}</b>
+                            </span>
+                            <button
+                                onClick={handleLogout}
+                                title="Cerrar sesión"
+                                className="flex items-center gap-1 rounded-full bg-stone-100 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 transition"
+                            >
+                                <LogOut className="h-4 w-4" />
+                                <span className="hidden sm:inline">Salir</span>
+                            </button>
+                        </div>
+                    ) : (
+                        <Link href="/tienda/login" className="flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-emerald-50 hover:text-emerald-800 transition">
+                            <User className="h-4 w-4" />
+                            <span className="hidden sm:inline">Mi Cuenta</span>
+                        </Link>
+                    )}
 
-                    {/* Menú Móvil (Hamburguesa para celulares) */}
-                    <button className="block md:hidden p-2 text-stone-600 hover:text-emerald-700 transition">
+                    <button className="block md:hidden p-2 text-stone-600 hover:text-emerald-700 transition" aria-label="Menú">
                         <Menu className="h-5.5 w-5.5" />
                     </button>
                 </div>

@@ -1,7 +1,11 @@
-import type { NextConfig } from "map";
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* Opciones de configuración normales aquí si las hubiera */
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb', // Podés ajustarlo a '5mb', '10mb', etc. según el tamaño de tus imágenes
+    },
+  },
 };
 
 export default nextConfig;

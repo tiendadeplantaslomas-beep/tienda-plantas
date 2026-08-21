@@ -554,7 +554,10 @@ export default function VentasPosPage() {
     const diferenciaCtaCte = saldoPendienteActual - montoAplicarInput;
 
     return (
-        <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-100 text-slate-800 overflow-hidden font-sans">
+
+        /*<div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-100 text-slate-800 overflow-hidden font-sans">*/
+        /*<div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6 space-y-4">*/
+        <div className="flex flex-col h-[calc(100vh-4rem)] bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6 space-y-4">
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 overflow-hidden">
 
                 <div className="lg:col-span-3 hidden lg:flex flex-col gap-2 shrink-0 overflow-hidden">

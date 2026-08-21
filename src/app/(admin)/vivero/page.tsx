@@ -77,7 +77,7 @@ export default function ViveroPage() {
     };
 
     return (
-        <div className="w-full min-h-[calc(100vh-4rem)] flex flex-col font-sans text-slate-800 pb-4">
+        <div className="bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-1 space-y-4">
 
             {/* ENCABEZADO ULTRA COMPACTO */}
             <div className="flex justify-between items-center bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-2xs mb-2 shrink-0 gap-2">

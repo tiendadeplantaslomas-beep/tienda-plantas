@@ -49,6 +49,10 @@ export const prisma: any = {
                     email: c.email || null,
                     address: c.address || null,
                     phone: c.phone || null,
+                    dni_cuit: c.dni_cuit || null,
+                    gender: c.gender || 'neutral',
+                    image_url: c.image_url || null,
+                    origin: c.origin || 'backend',
                     createdAt: c.createdAt || new Date()
                 }));
             } catch (err) {
@@ -58,15 +62,110 @@ export const prisma: any = {
                 connection.release();
             }
         },
-        create: async ({ data }: { data: { name: string; phone?: string | null; address?: string | null; email?: string | null } }) => {
+        findUnique: async ({ where }: { where: { email?: string; id?: string } }) => {
+            const connection = await pool.getConnection();
+            try {
+                let query = 'SELECT * FROM `Customer` WHERE ';
+                let param = '';
+                if (where.email) {
+                    query += 'email = ? LIMIT 1';
+                    param = where.email;
+                } else if (where.id) {
+                    query += 'id = ? LIMIT 1';
+                    param = where.id;
+                } else {
+                    return null;
+                }
+                const [rows]: any = await connection.execute(query, [param]);
+                return rows[0] || null;
+            } catch (err) {
+                console.error("Error en customer findUnique:", err);
+                return null;
+            } finally {
+                connection.release();
+            }
+        },
+        create: async ({ data }: { data: any }) => {
             const connection = await pool.getConnection();
             try {
                 const newId = 'cust-' + Date.now();
+                const name = data.name;
+                const email = data.email || null;
+                const phone = data.phone || null;
+                const address = data.address || null;
+                const password_hash = data.password_hash || data.passwordHash || null;
+                const dni_cuit = data.dni_cuit || null;
+                const gender = data.gender || 'neutral';
+                const image_url = data.image_url || data.imageUrl || null;
+                const origin = data.origin || 'backend';
+
                 await connection.execute(
-                    'INSERT INTO `Customer` (id, name, email, phone, address) VALUES (?, ?, ?, ?, ?)',
-                    [newId, data.name, data.email || null, data.phone || null, data.address || null]
+                    'INSERT INTO `Customer` (id, name, email, phone, address, password_hash, dni_cuit, origin, gender, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [newId, name, email, phone, address, password_hash, dni_cuit, origin, gender, image_url]
                 );
-                return { id: newId, name: data.name, email: data.email || null, address: data.email || null, phone: data.phone || null };
+                return { id: newId, name, email, phone, address, dni_cuit, origin, gender, image_url };
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        },
+        update: async ({ where, data }: { where: { id: string }; data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                const customerId = where.id;
+                const fields: string[] = [];
+                const values: any[] = [];
+
+                const imgVal = data.image_url !== undefined ? data.image_url : data.imageUrl;
+                const passVal = data.password_hash !== undefined ? data.password_hash : data.passwordHash;
+
+                if (data.gender !== undefined) {
+                    fields.push('gender = ?');
+                    values.push(data.gender);
+                }
+                if (imgVal !== undefined) {
+                    fields.push('image_url = ?');
+                    values.push(imgVal);
+                }
+                if (data.name !== undefined) {
+                    fields.push('name = ?');
+                    values.push(data.name);
+                }
+                if (data.address !== undefined) {
+                    fields.push('address = ?');
+                    values.push(data.address);
+                }
+                if (data.phone !== undefined) {
+                    fields.push('phone = ?');
+                    values.push(data.phone);
+                }
+                if (passVal !== undefined) {
+                    fields.push('password_hash = ?');
+                    values.push(passVal);
+                }
+
+                if (fields.length > 0) {
+                    values.push(customerId);
+                    await connection.execute(
+                        `UPDATE \`Customer\` SET ${fields.join(', ')} WHERE id = ?`,
+                        values
+                    );
+                }
+
+                const [rows]: any = await connection.execute(
+                    'SELECT * FROM `Customer` WHERE id = ? LIMIT 1',
+                    [customerId]
+                );
+                const c = rows[0];
+                if (!c) throw new Error('Cliente no encontrado');
+
+                const { password_hash, ...customerData } = c;
+                return {
+                    ...customerData,
+                    gender: c.gender || 'neutral',
+                    image_url: c.image_url || null
+                };
             } catch (err) {
                 throw err;
             } finally {
