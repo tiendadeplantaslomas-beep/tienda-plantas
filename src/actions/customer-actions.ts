@@ -1,6 +1,7 @@
 'use server';
 
-import { prisma } from '@/lib/prisma'; // O el cliente de base de datos que utilices
+import { prisma } from '@/lib/prisma';
+import { createCustomerService } from '@/lib/customerService';
 
 // --- OBTENER TODOS LOS CLIENTES ---
 export async function getCustomers() {
@@ -17,21 +18,10 @@ export async function getCustomers() {
     }
 }
 
-// --- CREAR UN CLIENTE NUEVO ---
-export async function createCustomer(data: { name: string; phone?: string; address?: string }) {
+// --- CREAR UN CLIENTE NUEVO MEDIANTE EL SERVICIO ---
+export async function createCustomer(data: any) {
     try {
-        if (!data.name || data.name.trim() === '') {
-            return { success: false, error: 'El nombre es obligatorio.' };
-        }
-
-        const customer = await prisma.customer.create({
-            data: {
-                name: data.name.trim().toUpperCase(),
-                phone: data.phone?.trim() || null,
-                address: data.address?.trim().toUpperCase() || null,
-            },
-        });
-
+        const customer = await createCustomerService(data);
         return { success: true, customer };
     } catch (error: any) {
         console.error('Error al crear cliente:', error);

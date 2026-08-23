@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
+import { createCustomerService } from '@/lib/customerService'; // 👈 Apunta correctamente a lib
 
 // GET: Obtener todos los clientes
 export async function GET() {
@@ -18,43 +19,11 @@ export async function GET() {
     }
 }
 
-// POST: Crear nuevo cliente
+// POST: Crear nuevo cliente utilizando el servicio centralizado
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-
-        // Mapeo flexible para soportar formularios en español o inglés
-        const rawName = body.name || body.nombre;
-        const rawPhone = body.phone || body.telefono;
-        const rawAddress = body.address || body.direccion;
-        const rawEmail = body.email || body.correo;
-
-        // Limpieza básica
-        const cleanName = rawName?.trim();
-
-        // Validación obligatoria
-        if (!cleanName) {
-            return NextResponse.json(
-                { error: 'El nombre del cliente es obligatorio.' },
-                { status: 400 }
-            );
-        }
-
-        // Convertir vacíos a null para evitar problemas en base de datos
-        const cleanPhone = rawPhone?.trim() || null;
-        const cleanAddress = rawAddress?.trim() ? rawAddress.trim().toUpperCase() : null;
-        const cleanEmail = rawEmail?.trim() ? rawEmail.trim().toLowerCase() : null;
-
-        const newCustomer = await prisma.customer.create({
-            data: {
-                name: cleanName.toUpperCase(),
-                phone: cleanPhone,
-                address: cleanAddress,
-                email: cleanEmail,
-                updatedAt: new Date(),
-            }
-        });
-
+        const newCustomer = await createCustomerService(body);
         return NextResponse.json(newCustomer, { status: 201 });
 
     } catch (error: any) {

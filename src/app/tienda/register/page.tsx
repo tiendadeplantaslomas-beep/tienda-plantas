@@ -119,34 +119,38 @@ export default function RegisterPage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-slate-800">
-            <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <h2 className="text-center text-2xl font-extrabold text-slate-900">
-                    Creá tu cuenta en la Tienda
-                </h2>
-                <p className="mt-2 text-center text-xs text-slate-600">
-                    ¿Ya tenés cuenta?{' '}
-                    <Link href="/tienda/login" className="font-medium text-emerald-600 hover:text-emerald-500">
-                        Iniciá sesión aquí
-                    </Link>
-                </p>
-            </div>
+        <div className="min-h-[85vh] bg-slate-50 flex flex-col justify-center py-4 px-4 font-sans text-slate-800">
+            <div className="max-w-md w-full mx-auto space-y-3">
+                {/* Encabezado */}
+                <div className="text-center space-y-0.5">
+                    <h2 className="text-lg font-extrabold text-slate-900 uppercase">
+                        Creá tu cuenta en la Tienda
+                    </h2>
+                    <p className="text-xs text-slate-600">
+                        ¿Ya tenés cuenta?{' '}
+                        <Link href="/tienda/login" className="font-medium text-emerald-600 hover:text-emerald-500">
+                            Iniciá sesión aquí
+                        </Link>
+                    </p>
+                </div>
 
-            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg px-4">
-                <div className="bg-white py-8 px-6 shadow-sm rounded-2xl border border-slate-200/80 sm:px-10">
+                {/* Tarjeta Contenedora del Formulario */}
+                <div className="bg-white py-5 px-5 sm:px-6 shadow-sm rounded-2xl border border-slate-200/80 space-y-3">
+                    {/* Mensajes de advertencia y éxito fijos arriba */}
                     {error && (
-                        <div className="mb-4 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl p-3">
+                        <div className="bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl p-2.5 font-medium">
                             {error}
                         </div>
                     )}
                     {successMessage && (
-                        <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-xl p-3">
+                        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-xl p-2.5 font-medium">
                             {successMessage}
                         </div>
                     )}
-                    <form className="space-y-4" onSubmit={handleSubmit}>
+
+                    <form className="space-y-3" onSubmit={handleSubmit}>
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                                 Nombre y Apellido *
                             </label>
                             <input
@@ -155,12 +159,12 @@ export default function RegisterPage() {
                                 placeholder="EJ: JUAN PÉREZ"
                                 value={form.name}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase"
+                                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase bg-slate-50 focus:bg-white transition"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                                 Correo Electrónico * <span className="text-stone-400 font-normal lowercase">(minúsculas)</span>
                             </label>
                             <input
@@ -169,12 +173,12 @@ export default function RegisterPage() {
                                 placeholder="correo@ejemplo.com"
                                 value={form.email}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 lowercase"
+                                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 lowercase bg-slate-50 focus:bg-white transition"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                                 Contraseña *
                             </label>
                             <div className="relative">
@@ -184,7 +188,7 @@ export default function RegisterPage() {
                                     placeholder="••••••••"
                                     value={form.password}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 pr-10 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    className="w-full px-3 py-1.5 pr-10 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white transition"
                                 />
                                 <button
                                     type="button"
@@ -194,55 +198,55 @@ export default function RegisterPage() {
                                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                 </button>
                             </div>
-                            <p className="mt-1 text-[11px] text-stone-500">
-                                De 8 a 14 caracteres, al menos una mayúscula, un número y un carácter especial.
+                            <p className="mt-0.5 text-[10px] text-stone-500">
+                                8 a 14 carac., al menos una mayúscula, un número y un carácter especial.
                             </p>
                         </div>
 
                         {/* Teléfono Estructurado */}
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                                 Teléfono / Celular *
                             </label>
-                            <div className="grid grid-cols-12 gap-2">
+                            <div className="grid grid-cols-12 gap-1.5">
                                 <div className="col-span-3">
-                                    <span className="block text-[10px] text-stone-400 mb-0.5">País</span>
+                                    <span className="block text-[9px] text-stone-400 mb-0.5">País</span>
                                     <input
                                         name="countryCode"
                                         type="text"
                                         value={form.countryCode}
                                         onChange={handleChange}
-                                        className="w-full px-2 py-2 text-sm text-center border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        className="w-full px-1 py-1.5 text-xs text-center border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white"
                                     />
                                 </div>
                                 <div className="col-span-4">
-                                    <span className="block text-[10px] text-stone-400 mb-0.5">Cód. Área *</span>
+                                    <span className="block text-[9px] text-stone-400 mb-0.5">Cód. Área *</span>
                                     <input
                                         name="areaCode"
                                         type="text"
                                         placeholder="11"
                                         value={form.areaCode}
                                         onChange={handleChange}
-                                        className="w-full px-2 py-2 text-sm text-center border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        className="w-full px-1 py-1.5 text-xs text-center border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white"
                                     />
                                 </div>
                                 <div className="col-span-5">
-                                    <span className="block text-[10px] text-stone-400 mb-0.5">Número *</span>
+                                    <span className="block text-[9px] text-stone-400 mb-0.5">Número *</span>
                                     <input
                                         name="phoneNumber"
                                         type="text"
                                         placeholder="12345678"
                                         value={form.phoneNumber}
                                         onChange={handleChange}
-                                        className="w-full px-2 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        className="w-full px-1 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white"
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <div>
-                                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                                     DNI / CUIT *
                                 </label>
                                 <input
@@ -251,12 +255,12 @@ export default function RegisterPage() {
                                     placeholder="20123456789"
                                     value={form.dni_cuit}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase"
+                                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase bg-slate-50 focus:bg-white transition"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                                    Dirección de Envío *
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                    Dirección *
                                 </label>
                                 <input
                                     name="address"
@@ -264,21 +268,21 @@ export default function RegisterPage() {
                                     placeholder="CALLE Y N° , C.P. , LOCALIDAD"
                                     value={form.address}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase"
+                                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase bg-slate-50 focus:bg-white transition"
                                 />
                             </div>
                         </div>
 
                         {/* Selector de Avatar / Estilo de Perfil */}
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                                 Estilo de Avatar *
                             </label>
                             <select
                                 name="gender"
                                 value={form.gender}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white transition"
                             >
                                 <option value="neutral">Estándar / Neutral</option>
                                 <option value="male">Estilo Masculino</option>
@@ -286,11 +290,11 @@ export default function RegisterPage() {
                             </select>
                         </div>
 
-                        <div className="pt-2">
+                        <div className="pt-1">
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full py-2.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition"
+                                className="w-full py-2 px-4 border border-transparent rounded-xl shadow-sm text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition cursor-pointer"
                             >
                                 {loading ? 'Registrando...' : 'Completar Registro'}
                             </button>

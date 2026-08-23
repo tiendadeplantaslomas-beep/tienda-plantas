@@ -1,34 +1,14 @@
+'use client';
 import Link from 'next/link';
 
 export default function TiendaLandingPage() {
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col justify-between font-sans text-slate-800">
-            {/* Navbar de la Tienda */}
-            <header className="bg-white border-b border-slate-200 py-4 px-6 flex justify-between items-center max-w-7xl mx-auto w-full rounded-b-2xl shadow-sm">
-                <div className="flex items-center gap-2">
-                    <span className="text-2xl">🌱</span>
-                    <span className="font-bold text-lg text-slate-900">Vivero Tienda Online</span>
-                </div>
-                <div className="flex items-center gap-3">
-                    <Link
-                        href="/tienda/login"
-                        className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-emerald-600 transition"
-                    >
-                        Iniciar Sesión
-                    </Link>
-                    <Link
-                        href="/tienda/register"
-                        className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-xl shadow-sm hover:bg-emerald-700 transition"
-                    >
-                        Registrarse
-                    </Link>
-                </div>
-            </header>
+        <div className="w-full h-full flex flex-col p-3 overflow-y-auto">
+            <div className="max-w-3xl w-full mx-auto space-y-4 my-auto">
 
-            {/* Sección Central / Hero */}
-            <main className="flex-1 flex items-center justify-center px-4 py-12">
-                <div className="max-w-3xl text-center bg-white p-8 md:p-12 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
-                    <span className="bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
+                {/* TARJETA / LANDING DE BIENVENIDA */}
+                <div className="bg-white/60 backdrop-blur-md rounded-xl p-8 md:p-12 shadow-md border border-slate-300/60 text-center space-y-6">
+                    <span className="inline-block bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-200">
                         Bienvenidos a nuestro vivero
                     </span>
                     <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">
@@ -40,24 +20,20 @@ export default function TiendaLandingPage() {
                     <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
                         <Link
                             href="/tienda/register"
-                            className="px-6 py-3 bg-emerald-600 text-white font-medium rounded-xl shadow-sm hover:bg-emerald-700 transition text-center"
+                            className="px-6 py-3 bg-emerald-600 text-white font-medium rounded-xl shadow-sm hover:bg-emerald-700 transition text-center text-xs"
                         >
                             Crear una cuenta
                         </Link>
                         <Link
                             href="/tienda/login"
-                            className="px-6 py-3 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition text-center"
+                            className="px-6 py-3 bg-white/80 text-slate-700 font-medium rounded-xl hover:bg-white border border-slate-300 transition text-center shadow-2xs text-xs"
                         >
                             Ya tengo cuenta
                         </Link>
                     </div>
                 </div>
-            </main>
 
-            {/* Footer */}
-            <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
-                Sistema de Gestión de Vivero &bull; Todos los derechos reservados
-            </footer>
+            </div>
         </div>
     );
 }
