@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Camera, Key, User, Package, CreditCard, ShieldCheck, Mail, Phone, MapPin, Eye, EyeOff } from 'lucide-react';
@@ -73,7 +73,32 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
 
-    // Función auxiliar para mostrar mensajes y auto-ocultar los de éxito a los 4 segundos
+    // Estados para el historial de compras
+    const [orders, setOrders] = useState<any[]>([]);
+    const [loadingOrders, setLoadingOrders] = useState(false);
+
+    // Cargar historial de compras al hacer clic en la solapa de órdenes
+    useEffect(() => {
+        if (activeTab === 'orders' && orders.length === 0) {
+            fetchCustomerOrders();
+        }
+    }, [activeTab]);
+
+    const fetchCustomerOrders = async () => {
+        setLoadingOrders(true);
+        try {
+            const res = await fetch(`/api/tienda/customer/orders?customerId=${customer.id}`);
+            const data = await res.json();
+            if (res.ok) {
+                setOrders(data.orders || []);
+            }
+        } catch (err) {
+            console.error('Error al obtener compras:', err);
+        } finally {
+            setLoadingOrders(false);
+        }
+    };
+
     const showNotification = (text: string, type: 'success' | 'error') => {
         setMessage({ text, type });
         if (type === 'success') {
@@ -199,18 +224,27 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
         }
     };
 
-    const avatarStyle = selectedGender === 'male' ? 'micah' : selectedGender === 'female' ? 'adventurer' : 'avataaars';
-    const defaultAvatarUrl = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${customer?.email || 'user'}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
-    const displayImage = customImage || customer?.image_url || defaultAvatarUrl;
+    // Función para obtener la imagen por defecto según el género seleccionado
+    const getDefaultAvatar = (gender: string) => {
+        switch (gender) {
+            case 'male':
+                return '/avatar_h.png';
+            case 'female':
+                return '/avatar_m.png';
+            default:
+                return '/avatar.png';
+        }
+    };
+
+    const displayImage = customImage || customer?.image_url || getDefaultAvatar(selectedGender);
 
     return (
         <div className="bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6">
             <div className="max-w-6xl w-full mx-auto">
 
-                {/* ESTRUCTURA GENERAL DE DOS COLUMNAS (LG) */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-                    {/* COLUMNA IZQUIERDA: Tarjeta / Resumen de Perfil (Span 4) */}
+                    {/* COLUMNA IZQUIERDA: Tarjeta / Resumen de Perfil */}
                     <div className="lg:col-span-4 bg-white/80 backdrop-blur-md rounded-xl p-5 shadow-sm border border-slate-200 flex flex-col items-center text-center space-y-4 sticky top-6">
                         <div className="relative">
                             <img
@@ -248,7 +282,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                         </div>
                     </div>
 
-                    {/* COLUMNA DERECHA: Solapas y Formularios (Span 8) */}
+                    {/* COLUMNA DERECHA: Solapas y Formularios */}
                     <div className="lg:col-span-8 bg-white/95 backdrop-blur-xs rounded-xl shadow-sm border border-slate-200 overflow-hidden">
 
                         {/* Barra de solapas horizontales */}
@@ -328,7 +362,6 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                             />
                                         </div>
 
-                                        {/* Dirección Estructurada */}
                                         <div>
                                             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Calle</label>
                                             <input
@@ -376,7 +409,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Localidad / Partido</label>
                                             <input
                                                 type="text"
-                                                placeholder="Ej: Lanús"
+                                                placeholder="Ej: Lomas de Zamora"
                                                 value={editForm.city}
                                                 onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
                                                 className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white transition"
@@ -561,18 +594,66 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                 </form>
                             )}
 
-                            {/* Solapa 5: Historial de Compras */}
+                            {/* Solapa 5: Historial de Compras (Actualizado) */}
                             {activeTab === 'orders' && (
-                                <div className="text-center py-10 bg-slate-50 rounded-lg border border-dashed border-slate-300">
-                                    <Package className="h-10 w-10 text-stone-300 mx-auto mb-2.5" />
-                                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Sin compras registradas</h3>
-                                    <p className="text-xs text-stone-400 mt-1 max-w-sm mx-auto">Tus pedidos realizados aparecerán detallados en este sector con su respectivo estado de seguimiento.</p>
-                                    <Link
-                                        href="/tienda"
-                                        className="inline-block mt-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-5 rounded-lg transition shadow-2xs"
-                                    >
-                                        Ir a Comprar Productos
-                                    </Link>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Mis Pedidos y Compras</h3>
+                                        <button
+                                            onClick={fetchCustomerOrders}
+                                            className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold underline cursor-pointer"
+                                        >
+                                            Actualizar
+                                        </button>
+                                    </div>
+
+                                    {loadingOrders ? (
+                                        <div className="text-center py-10 text-xs text-stone-400">Cargando historial de compras...</div>
+                                    ) : orders.length === 0 ? (
+                                        <div className="text-center py-10 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+                                            <Package className="h-10 w-10 text-stone-300 mx-auto mb-2.5" />
+                                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Sin compras registradas</h3>
+                                            <p className="text-xs text-stone-400 mt-1 max-w-sm mx-auto">Tus pedidos realizados aparecerán detallados en este sector con su respectivo estado de seguimiento.</p>
+                                            <Link
+                                                href="/tienda"
+                                                className="inline-block mt-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-5 rounded-lg transition shadow-2xs"
+                                            >
+                                                Ir a Comprar Productos
+                                            </Link>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {orders.map((order: any) => (
+                                                <div key={order.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+                                                    <div className="flex flex-wrap justify-between items-center text-xs gap-2">
+                                                        <span className="font-bold text-slate-800">Pedido #{order.id.slice(-6).toUpperCase()}</span>
+                                                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${order.status === 'COMPLETED' || order.status === 'APROBADO' ? 'bg-emerald-100 text-emerald-800' :
+                                                            order.status === 'PENDING' || order.status === 'PENDIENTE' ? 'bg-amber-100 text-amber-800' :
+                                                                'bg-slate-200 text-slate-700'
+                                                            }`}>
+                                                            {order.status || 'PENDIENTE'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-[11px] text-stone-500 flex flex-wrap justify-between gap-2">
+                                                        <span>Fecha: {new Date(order.createdAt || order.date).toLocaleDateString('es-AR')}</span>
+                                                        <span className="font-bold text-slate-700">Total: ${Number(order.total || 0).toLocaleString('es-AR')}</span>
+                                                    </div>
+                                                    {order.items && order.items.length > 0 && (
+                                                        <div className="border-t border-slate-200 pt-2 mt-2 text-[11px] text-stone-600 space-y-1">
+                                                            <span className="font-semibold block text-slate-700">Productos:</span>
+                                                            <ul className="list-disc list-inside space-y-0.5">
+                                                                {order.items.map((item: any, idx: number) => (
+                                                                    <li key={idx} className="truncate">
+                                                                        {item.quantity || 1}x {item.productName || item.name || 'Producto'} (${Number(item.price || 0).toLocaleString('es-AR')})
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

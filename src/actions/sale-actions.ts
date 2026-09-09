@@ -1,7 +1,8 @@
 'use server';
 
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
+import { PaymentMethod } from '@prisma/client';
 
 export interface CartItemInput {
     productId: string;
@@ -13,11 +14,10 @@ export interface CartItemInput {
 }
 
 export interface CreateSaleInput {
-    paymentMethod?: 'EFECTIVO' | 'TRANSFERENCIA' | 'DEBITO' | 'CREDITO' | 'MERCADOPAGO';
+    paymentMethod?: PaymentMethod;
     customerName?: string;
     customerId?: string;
     notes?: string;
-    userId?: string;
     paidAmount?: number;
     pendingBalance?: number;
     paymentStatus?: string;
@@ -56,7 +56,7 @@ export async function getDailySalesSummary() {
 }
 
 /**
- * Registra una venta completa, descuenta stock y genera el movimiento de pago inicial.
+ * Registra una venta completa, descuenta stock de forma segura y genera los movimientos y pagos.
  */
 export async function createSale(data: CreateSaleInput) {
     try {
@@ -67,10 +67,12 @@ export async function createSale(data: CreateSaleInput) {
         // 1. Calcular total general
         const total = data.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
 
-        // Definir valores financieros por defecto (si el front no los manda, se asume pago total al contado)
+        // Definir valores financieros por defecto
         const paidAmount = data.paidAmount !== undefined ? data.paidAmount : total;
         const pendingBalance = data.pendingBalance !== undefined ? data.pendingBalance : Math.max(0, total - paidAmount);
         const paymentStatus = data.paymentStatus || (pendingBalance === 0 ? 'PAGADO' : paidAmount > 0 ? 'PAGO PARCIAL' : 'PENDIENTE');
+        const isPaid = paidAmount >= total;
+        const finalPaymentMethod = data.paymentMethod || PaymentMethod.EFECTIVO;
 
         // 2. Transacción atómica en la Base de Datos
         const sale = await prisma.$transaction(async (tx) => {
@@ -90,19 +92,19 @@ export async function createSale(data: CreateSaleInput) {
                 }
             }
 
-            // Crear la Venta General con sus campos financieros
+            // Crear la Venta General respetando los campos de tu Schema
             const newSale = await tx.sale.create({
                 data: {
                     total: total,
                     paidAmount: paidAmount,
                     pendingBalance: pendingBalance,
                     paymentStatus: paymentStatus,
-                    paymentMethod: data.paymentMethod || 'EFECTIVO',
+                    paymentMethod: finalPaymentMethod,
                     paymentReference: data.paymentReference || null,
-                    customerName: data.customerName ? data.customerName.trim().toUpperCase() : 'CLIENTE OCASIONAL',
+                    isPaid: isPaid,
+                    customerName: data.customerName ? data.customerName.trim().toUpperCase() : 'CLIENTE MOSTRADOR',
                     notes: data.notes ? data.notes.trim().toUpperCase() : null,
                     ...(data.customerId ? { customerId: data.customerId } : {}),
-                    ...(data.userId ? { userId: data.userId } : {}),
                     items: {
                         create: data.items.map(item => ({
                             productId: item.productId,
@@ -117,14 +119,14 @@ export async function createSale(data: CreateSaleInput) {
                 }
             });
 
-            // Si se abonó algo de dinero en esta venta, registrarlo también en la tabla de Pagos (Payment)
+            // Registrar pago inicial si corresponde
             if (paidAmount > 0) {
                 await tx.payment.create({
                     data: {
                         saleId: newSale.id,
                         customerId: data.customerId || null,
                         amount: paidAmount,
-                        method: data.paymentMethod || 'EFECTIVO',
+                        paymentMethod: finalPaymentMethod,
                         reference: data.paymentReference || null,
                         notes: `PAGO INICIAL - VENTA N° ${newSale.id.slice(-6).toUpperCase()}`
                     }
@@ -176,7 +178,7 @@ export async function createSale(data: CreateSaleInput) {
 }
 
 /**
- * Busca clientes por nombre, teléfono o email para el selector del POS / Ventas.
+ * Busca clientes para el selector del POS.
  */
 export async function searchCustomers(searchTerm: string = '') {
     try {

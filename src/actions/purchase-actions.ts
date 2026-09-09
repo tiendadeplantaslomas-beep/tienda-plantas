@@ -21,12 +21,14 @@ export interface CreatePurchasePayload {
     date?: string;
     otherCostsTotal: number;
     notes?: string;
+    userId?: string; // NUEVO: Usuario que realiza la carga
+    paymentMethod?: 'EFECTIVO' | 'TRANSFERENCIA' | 'CREDITO' | 'DEBITO' | 'MERCADOPAGO'; // NUEVO: Medio de pago
     items: PurchaseItemInput[];
 }
 
 export async function createPurchase(payload: CreatePurchasePayload) {
     try {
-        const { supplierId, supplierName, docType, docNumber, date, otherCostsTotal, notes, items } = payload;
+        const { supplierId, supplierName, docType, docNumber, date, otherCostsTotal, notes, userId, paymentMethod, items } = payload;
 
         if (!items || items.length === 0) {
             return { error: 'Debes incluir al menos un producto en la carga.' };
@@ -55,6 +57,34 @@ export async function createPurchase(payload: CreatePurchasePayload) {
         const fletePerUnit = totalUnits > 0 ? Math.round(Number(otherCostsTotal) / totalUnits) : 0;
 
         const result = await prisma.$transaction(async (tx) => {
+
+            // 1. Calcular el costo total preliminar para validaciones de caja
+            const preliminarySubtotal = items.reduce((acc, item) => acc + (Number(item.quantity) * Number(item.unitCost)), 0);
+            const totalPurchaseCost = preliminarySubtotal + Number(otherCostsTotal);
+
+            // 2. Si se paga en EFECTIVO, validar caja abierta y registrar egreso automático
+            if (paymentMethod === 'EFECTIVO') {
+                if (!userId) {
+                    throw new Error("Se requiere el ID del usuario para registrar compras pagadas en efectivo.");
+                }
+
+                const activeShift = await tx.cashShift.findFirst({
+                    where: { userId: userId, status: 'OPEN' }
+                });
+
+                if (!activeShift) {
+                    throw new Error("OPERACIÓN DENEGADA: No se puede abonar una compra en efectivo sin una caja abierta.");
+                }
+
+                await tx.cashMovement.create({
+                    data: {
+                        type: 'EGRESO',
+                        description: `PAGO COMPRA ${docType} N° ${docNumber || 'S/N'} (${supplierName || 'PROVEEDOR'})`,
+                        amount: -Math.abs(totalPurchaseCost),
+                    }
+                });
+            }
+
             let subtotal = 0;
             const processedItems = [];
 
@@ -164,6 +194,7 @@ export async function createPurchase(payload: CreatePurchasePayload) {
         revalidatePath('/productos');
         revalidatePath('/stock');
         revalidatePath('/compras');
+        revalidatePath('/caja'); // Refrescar caja para reflejar el egreso si fue al contado
 
         return { success: true, purchaseId: result.id };
     } catch (error: any) {

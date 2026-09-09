@@ -2,6 +2,17 @@
 
 import { prisma } from '@/lib/prisma';
 import { unstable_cache, revalidateTag } from 'next/cache';
+import { v2 as cloudinary } from 'cloudinary';
+
+// ----------------------------------------------------------------------
+// CONFIGURACIÓN DE CLOUDINARY
+// ----------------------------------------------------------------------
+
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 // ----------------------------------------------------------------------
 // INTERFACES / TIPOS
@@ -43,7 +54,7 @@ export async function createCategory(data: { name: string; defaultMargin: number
     try {
         const cleanName = data.name.trim().toUpperCase();
         if (!cleanName) return { error: 'El nombre de la categoría es obligatorio.' };
-        
+
         const existing = await prisma.category.findFirst({
             where: { name: cleanName },
         });
@@ -63,6 +74,22 @@ export async function createCategory(data: { name: string; defaultMargin: number
     } catch (error) {
         console.error('Error en createCategory:', error);
         return { error: 'Error al crear la categoría.' };
+    }
+}
+
+export async function deleteCategory(id: string) {
+    try {
+        const productsCount = await prisma.product.count({ where: { categoryId: id } });
+        if (productsCount > 0) {
+            return { error: `No se puede eliminar la categoría porque tiene ${productsCount} producto(s) asociado(s).` };
+        }
+
+        await prisma.category.delete({ where: { id } });
+        revalidateTag('categories');
+        return { success: true };
+    } catch (error) {
+        console.error('Error al eliminar categoría:', error);
+        return { error: 'No se pudo eliminar la categoría.' };
     }
 }
 
@@ -109,25 +136,51 @@ export async function createSupplier(data: { name: string; phone?: string; addre
     }
 }
 
+export async function deleteSupplier(id: string) {
+    try {
+        const productsCount = await prisma.product.count({ where: { supplierId: id } });
+        if (productsCount > 0) {
+            return { error: `No se puede eliminar el proveedor porque tiene ${productsCount} producto(s) asociado(s).` };
+        }
+
+        await prisma.supplier.delete({ where: { id } });
+        revalidateTag('suppliers');
+        return { success: true };
+    } catch (error) {
+        console.error('Error al eliminar proveedor:', error);
+        return { error: 'No se pudo eliminar el proveedor.' };
+    }
+}
+
 // ----------------------------------------------------------------------
 // PRODUCTOS
 // ----------------------------------------------------------------------
 
 export async function getProducts() {
     try {
-        return await prisma.product.findMany({
+        const rawProducts = await prisma.product.findMany({
             orderBy: { updatedAt: 'desc' },
             include: {
-                category: {
-                    select: { id: true, name: true, defaultMargin: true },
-                },
-                supplier: {
-                    select: { id: true, name: true, phone: true, address: true, notes: true },
-                },
+                category: true, // Relación correcta con la categoría
+                supplier: true, // Relación correcta con el proveedor
             },
         });
+
+        // Convertimos los campos numéricos si es necesario para asegurar la serialización
+        const products = rawProducts.map((p) => ({
+            ...p,
+            price: Number(p.price),
+            cost: Number(p.cost),
+            otherCosts: Number(p.otherCosts),
+            margin: Number(p.margin),
+            taxRate: Number(p.taxRate),
+            stock: Number(p.stock),
+            minStock: Number(p.minStock),
+        }));
+
+        return products;
     } catch (error) {
-        console.error('Error en getProducts:', error);
+        console.error("Error detallado en getProducts:", error);
         return [];
     }
 }
@@ -138,13 +191,28 @@ export async function generateNextProductCode(categoryId: string): Promise<strin
             where: { id: categoryId },
             select: { name: true },
         });
-        // Toma las primeras 3 letras en mayús. (ej: SUSTRATOS -> SUS)
         const prefix = category ? category.name.substring(0, 3).toUpperCase() : 'PRO';
-        const count = await prisma.product.count({ where: { categoryId } });
-        const nextNum = (count + 1).toString().padStart(3, '0'); // Consecutivo de 3 dígitos
 
-        return `${prefix}${nextNum}`; // Resultado: SUS001
-    } catch {
+        // Bucle inteligente para buscar un código libre y evitar colisiones
+        let counter = 1;
+        let candidateCode = '';
+        let exists = true;
+
+        while (exists) {
+            candidateCode = `${prefix}${counter.toString().padStart(3, '0')}`;
+            const found = await prisma.product.findUnique({
+                where: { code: candidateCode }
+            });
+            if (!found) {
+                exists = false;
+            } else {
+                counter++;
+            }
+        }
+
+        return candidateCode;
+    } catch (error) {
+        console.error('Error generando código:', error);
         return `PROD${Date.now().toString().slice(-3)}`;
     }
 }
@@ -157,9 +225,64 @@ export async function saveProduct(data: SaveProductInput) {
         }
 
         let finalCode = data.code?.trim().toUpperCase();
-        if (!finalCode) {
+
+        console.log('--- DEBUG SAVE PRODUCT ---');
+        console.log('ID del producto:', data.id);
+        console.log('Categoría seleccionada en el formulario:', data.categoryId);
+
+        if (data.id) {
+            const existingProduct = await prisma.product.findUnique({
+                where: { id: data.id },
+                select: { categoryId: true, code: true }
+            });
+
+            console.log('Categoría anterior en BD:', existingProduct?.categoryId);
+
+            if (existingProduct) {
+                // Si la categoría cambió respecto a la almacenada, FORZAMOS la creación de un nuevo código
+                if (existingProduct.categoryId !== data.categoryId) {
+                    finalCode = await generateNextProductCode(data.categoryId);
+                    console.log('¡Categoría cambiada! Nuevo código generado:', finalCode);
+                } else if (!finalCode) {
+                    finalCode = existingProduct.code;
+                }
+            } else if (!finalCode) {
+                finalCode = await generateNextProductCode(data.categoryId);
+            }
+        } else if (!finalCode) {
             finalCode = await generateNextProductCode(data.categoryId);
         }
+
+        // --- GESTIÓN DE IMAGEN CON CLOUDINARY Y CARPETAS POR CATEGORÍA ---
+        let finalImageUrl = data.imageUrl || null;
+
+        if (finalImageUrl && finalImageUrl.startsWith('data:image/')) {
+            try {
+                let folderName = 'tienda-plantas/general';
+                const category = await prisma.category.findUnique({
+                    where: { id: data.categoryId },
+                    select: { name: true }
+                });
+
+                if (category) {
+                    const cleanCategoryName = category.name
+                        .toLowerCase()
+                        .normalize("NFD")
+                        .replace(/[\u0300-\u036f]/g, "")
+                        .replace(/[^a-z0-9]/g, '-');
+                    folderName = `tienda-plantas/${cleanCategoryName}`;
+                }
+
+                const uploadResponse = await cloudinary.uploader.upload(finalImageUrl, {
+                    folder: folderName,
+                });
+                finalImageUrl = uploadResponse.secure_url;
+            } catch (cloudinaryError) {
+                console.error('Error al subir imagen a Cloudinary:', cloudinaryError);
+                return { error: 'No se pudo subir la imagen a la nube. Intenta nuevamente.' };
+            }
+        }
+        // ----------------------------------------------------------------
 
         const productData = {
             name,
@@ -167,7 +290,7 @@ export async function saveProduct(data: SaveProductInput) {
             categoryId: data.categoryId,
             supplierId: data.supplierId || null,
             description: data.description || null,
-            imageUrl: data.imageUrl || null,
+            imageUrl: finalImageUrl,
             cost: Math.round(data.cost ?? 0),
             otherCosts: Math.round(data.otherCosts ?? 0),
             margin: Math.round(data.margin ?? 0),
@@ -190,8 +313,13 @@ export async function saveProduct(data: SaveProductInput) {
         }
 
         return { success: true };
-    } catch (error) {
-        console.error('Error al guardar producto:', error);
+    } catch (error: any) {
+        console.error('Error detallado al guardar producto:', error);
+
+        if (error.code === 'P2002') {
+            return { error: 'Ya existe un producto registrado con ese código. Por favor, utilizá un código diferente.' };
+        }
+
         return { error: 'Error al procesar la solicitud del producto.' };
     }
 }
@@ -230,6 +358,8 @@ export async function importProductsBatch(productsData: any[]) {
             const minStock = Math.round(parseInt(raw.StockMinimo || raw.minStock) || 2);
             const code = raw.Codigo || raw.code || (await generateNextProductCode(category.id));
 
+            const imageUrl = raw.Imagen || raw.imageUrl || raw.Image || "https://res.cloudinary.com/mfzvsfah/image/upload/v1787528074/sinfoto.jpg";
+
             await prisma.product.upsert({
                 where: { code },
                 update: {
@@ -242,6 +372,7 @@ export async function importProductsBatch(productsData: any[]) {
                     stock,
                     minStock,
                     categoryId: category.id,
+                    imageUrl,
                 },
                 create: {
                     code,
@@ -254,6 +385,7 @@ export async function importProductsBatch(productsData: any[]) {
                     price,
                     stock,
                     minStock,
+                    imageUrl,
                 },
             });
             count++;

@@ -59,7 +59,7 @@ model Product {
   code        String         @unique
   name        String
   description String?        @db.Text 
-  imageUrl    String?        @db.Text 
+  imageUrl    String?        @db.LongText
   
   categoryId  String
   category    Category       @relation(fields: [categoryId], references: [id])
@@ -170,6 +170,19 @@ model CashMovement {
   description String
   amount      Int      
   createdAt   DateTime @default(now())
+}
+
+// -------------------------------------------------------------
+// CIERRE DE CAJA
+// -------------------------------------------------------------
+model CashClosure {
+  id            String   @id @default(cuid())
+  date          String   @unique // Formato 'YYYY-MM-DD' para identificar el día exacto
+  totalSales    Float    // Total vendido en el día
+  netCash       Float    // Efectivo neto real en caja al cerrar
+  closedAt      DateTime @default(now())
+  closedBy      String?  // Usuario o cajero que realizó el cierre
+  notes         String?  // Observaciones del arqueo físico vs sistema
 }
 
 // -------------------------------------------------------------

@@ -17,6 +17,7 @@
     "@tidbcloud/serverless": "^0.3.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.10.1",
     "lucide-react": "^1.24.0",
     "mysql2": "^3.23.3",
     "next": "16.2.10",

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { getProducts } from '@/actions/product-actions';
+import { createSale } from '@/actions/sale-actions';
 
 interface ProductItem {
     id: string;
@@ -36,6 +37,8 @@ interface Order {
     status: 'REGISTRADO' | 'ENTREGADO';
     isPaid: boolean;
     paymentStatus?: 'PAGADO' | 'PAGO PARCIAL' | 'PENDIENTE';
+    paymentMethod?: string;
+    paymentReference?: string;
     isShipping: boolean;
     shippingAddress: string;
     items: CartItem[];
@@ -81,7 +84,15 @@ export default function VentasPosPage() {
     const [isShipping, setIsShipping] = useState(false);
     const [shippingAddress, setShippingAddress] = useState('');
 
-    const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+    // Corrección: Obtener la fecha actual en hora local (evita desfases de UTC al recargar)
+    const todayStr = useMemo(() => {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }, []);
+
     const [dateFrom, setDateFrom] = useState(todayStr);
     const [dateTo, setDateTo] = useState(todayStr);
     const [paymentFilter, setPaymentFilter] = useState<'TODOS' | 'PENDIENTES' | 'PAGADOS'>('TODOS');
@@ -103,6 +114,7 @@ export default function VentasPosPage() {
     const addressInputRef = useRef<HTMLInputElement>(null);
     const newClientAddressInputRef = useRef<HTMLInputElement>(null);
 
+    // Cargar datos iniciales y sincronizar órdenes según el rango de fechas seleccionado
     useEffect(() => {
         const loadInitialData = async () => {
             try {
@@ -121,10 +133,40 @@ export default function VentasPosPage() {
                     setSettings(settingsData);
                 }
 
-                const resOrders = await fetch('/api/orders');
+                // Cargar operaciones desde la BD filtradas por fecha
+                const resOrders = await fetch(`/api/ventas?from=${dateFrom}&to=${dateTo}`);
                 if (resOrders.ok) {
                     const ordersData = await resOrders.json();
-                    setOrders(ordersData);
+                    const mappedOrders: Order[] = ordersData.map((s: any) => ({
+                        id: s.id,
+                        createdAt: s.createdAt || new Date().toISOString(),
+                        client: s.customerName || s.client || 'CLIENTE MOSTRADOR',
+                        clientEmail: s.customerEmail || s.clientEmail || 'sin_email@pos.com',
+                        total: Number(s.total || 0),
+                        paidAmount: Number(s.paidAmount || 0),
+                        pendingBalance: Number(s.pendingBalance !== undefined ? s.pendingBalance : (s.total - (s.paidAmount || 0))),
+                        status: s.status || 'REGISTRADO',
+                        isPaid: Boolean(s.isPaid),
+                        paymentStatus: s.paymentStatus || (s.isPaid ? 'PAGADO' : 'PENDIENTE'),
+                        paymentMethod: s.paymentMethod || 'EFECTIVO',
+                        paymentReference: s.paymentReference || '',
+                        isShipping: Boolean(s.isShipping),
+                        shippingAddress: s.shippingAddress || '',
+                        items: (s.items || []).map((it: any) => ({
+                            id: it.productId || it.id,
+                            code: it.code || 'REF',
+                            name: it.name || it.productName || 'Producto',
+                            cost: Number(it.cost || it.unitCost || 0),
+                            price: Number(it.price || it.unitPrice || 0),
+                            stock: Number(it.stock || 0),
+                            quantity: Number(it.quantity || 1)
+                        })),
+                        channel: s.channel || 'POS',
+                        invoiced: Boolean(s.invoiced),
+                        invoiceNumber: s.invoiceNumber,
+                        invoiceType: s.invoiceType
+                    }));
+                    setOrders(mappedOrders);
                 }
             } catch (err) {
                 console.error('Error al cargar datos iniciales:', err);
@@ -132,12 +174,16 @@ export default function VentasPosPage() {
         };
 
         loadInitialData();
-    }, []);
+    }, [dateFrom, dateTo]);
 
     const handleAbrirModalPago = (order: Order) => {
         const saldo = order.pendingBalance !== undefined ? order.pendingBalance : (order.isPaid ? 0 : order.total);
         setMontoAplicarInput(saldo);
-        setPaymentModalOrder({ ...order });
+        setPaymentModalOrder({
+            ...order,
+            paymentMethod: order.paymentMethod || 'EFECTIVO',
+            paymentReference: order.paymentReference || ''
+        });
     };
 
     useEffect(() => {
@@ -358,50 +404,62 @@ export default function VentasPosPage() {
         const clientEmailFinal = selectedClient?.email || newClientEmail || 'sin_email@pos.com';
         const finalOrderId = activeOrderNumber || (Math.floor(1000 + Math.random() * 9000)).toString();
 
-        const orderPayload = {
-            id: finalOrderId,
-            createdAt: new Date().toISOString(),
-            client: clientNameFinal,
-            clientEmail: clientEmailFinal,
-            total: totalAmount,
-            paidAmount: 0,
-            pendingBalance: totalAmount,
-            status: 'REGISTRADO',
-            isPaid: false,
-            paymentStatus: 'PENDIENTE',
-            // <---method: 'EFECTIVO',  Asegúrate de que aquí también diga 'method' y no 'paymentMethod'
-            paymentReference: '',
-            isShipping,
-            shippingAddress,
-            items: [...cart],
-            channel: 'POS',
-            invoiced: false
-        };
-
         try {
-            const response = await fetch('/api/orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(orderPayload)
+            const resultado = await createSale({
+                items: cart.map(item => ({
+                    productId: item.id,
+                    code: item.code,
+                    name: item.name,
+                    quantity: item.quantity,
+                    unitPrice: item.price,
+                    unitCost: item.cost || 0
+                })),
+                customerName: clientNameFinal,
+                customerId: selectedClient?.id || undefined,
+                paymentMethod: 'EFECTIVO',
+                paidAmount: 0,
+                pendingBalance: totalAmount,
+                paymentStatus: 'PENDIENTE',
+                notes: isShipping ? `ENVÍO A: ${shippingAddress}` : undefined
             });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || errorData.message || `Error del servidor (${response.status})`);
+            if (resultado.error) {
+                alert(`Error al registrar la venta: ${resultado.error}`);
+                return;
             }
 
+            const newOrderObject: Order = {
+                id: finalOrderId,
+                createdAt: new Date().toISOString(),
+                client: clientNameFinal,
+                clientEmail: clientEmailFinal,
+                total: totalAmount,
+                paidAmount: 0,
+                pendingBalance: totalAmount,
+                status: 'REGISTRADO',
+                isPaid: false,
+                paymentStatus: 'PENDIENTE',
+                paymentMethod: 'EFECTIVO',
+                paymentReference: '',
+                isShipping,
+                shippingAddress,
+                items: [...cart],
+                channel: 'POS',
+                invoiced: false
+            };
+
             if (editingOrderId) {
-                setOrders(prev => prev.map(ord => ord.id === editingOrderId ? orderPayload : ord));
-                alert(`Operación #${editingOrderId} actualizada exitosamente en el servidor.`);
+                setOrders(prev => prev.map(ord => ord.id === editingOrderId ? newOrderObject : ord));
+                alert(`Operación #${editingOrderId} actualizada exitosamente en la base de datos.`);
             } else {
-                setOrders([orderPayload, ...orders]);
-                alert(`¡Pedido #${orderPayload.id} registrado como PENDIENTE en el servidor con éxito!`);
+                setOrders([newOrderObject, ...orders]);
+                alert(`¡Pedido #${finalOrderId} registrado correctamente con control de stock!`);
             }
 
             handleCancelCurrentOrder();
         } catch (error: any) {
             console.error('Error al guardar el pedido:', error);
-            alert(`No se pudo registrar el pedido en el servidor: ${error.message}`);
+            alert(`No se pudo registrar el pedido: ${error.message}`);
         }
     };
 
@@ -434,7 +492,7 @@ export default function VentasPosPage() {
         const paymentPayload = {
             saleId: order.id,
             amount: montoAplicarInput,
-            method: order.paymentMethod, // <--- CORREGIDO: cambiado de paymentMethod a method
+            method: order.paymentMethod || 'EFECTIVO',
             reference: order.paymentReference || ''
         };
 
@@ -533,16 +591,13 @@ export default function VentasPosPage() {
 
     const filteredOrders = useMemo(() => {
         return orders.filter(ord => {
-            const ordDate = ord.createdAt.split('T')[0];
-            const inDateRange = ordDate >= dateFrom && ordDate <= dateTo;
-
             let inPaymentFilter = true;
             if (paymentFilter === 'PENDIENTES') inPaymentFilter = !ord.isPaid;
             if (paymentFilter === 'PAGADOS') inPaymentFilter = ord.isPaid;
 
-            return inDateRange && inPaymentFilter;
+            return inPaymentFilter;
         });
-    }, [orders, dateFrom, dateTo, paymentFilter]);
+    }, [orders, paymentFilter]);
 
     const countTodos = orders.length;
     const countPendientesPago = orders.filter(o => !o.isPaid).length;
@@ -554,9 +609,6 @@ export default function VentasPosPage() {
     const diferenciaCtaCte = saldoPendienteActual - montoAplicarInput;
 
     return (
-
-        /*<div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-100 text-slate-800 overflow-hidden font-sans">*/
-        /*<div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6 space-y-4">*/
         <div className="flex flex-col h-[calc(100vh-4rem)] bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6 space-y-4">
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 overflow-hidden">
 
@@ -616,7 +668,7 @@ export default function VentasPosPage() {
                             Listado ({paymentFilter}) - {filteredOrders.length} op.
                         </h3>
                         {filteredOrders.length === 0 ? (
-                            <p className="text-[10px] text-slate-400 italic text-center py-4">No hay operaciones en este estado.</p>
+                            <p className="text-[10px] text-slate-400 italic text-center py-4">No hay operaciones en este rango de fecha / estado.</p>
                         ) : (
                             filteredOrders.map(ord => (
                                 <div key={ord.id} className="p-2.5 bg-slate-50 border border-slate-200 rounded text-[11px] space-y-1.5">
@@ -1085,7 +1137,7 @@ export default function VentasPosPage() {
                             <div className="space-y-1">
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase">Método de Pago</label>
                                 <select
-                                    value={paymentModalOrder.paymentMethod}
+                                    value={paymentModalOrder.paymentMethod || 'EFECTIVO'}
                                     onChange={(e) => setPaymentModalOrder({ ...paymentModalOrder, paymentMethod: e.target.value })}
                                     className="w-full border border-slate-200 rounded p-2 font-bold uppercase bg-slate-50 outline-none"
                                 >
@@ -1236,7 +1288,7 @@ export default function VentasPosPage() {
                         <div className="p-3 bg-slate-100 border-t border-slate-200 flex justify-between items-center shrink-0">
                             <button
                                 onClick={() => setPreviewModal(null)}
-                                className="px-3 py-1.5 text-slate-600 font-bold hover:underline text-xs"
+                                className="px-3 py-1.5 text-slate-600 font-bold hover:underline textxs"
                             >
                                 Cerrar
                             </button>

@@ -3,12 +3,12 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getDashboardStats, getSalesEvolution } from '@/actions/dashboard-actions';
 
 interface VentaMes {
     mes: string;
     montoTexto: string;
     valorNumerico: number;
-    alturaClase?: string;
 }
 
 export default function DashboardPage() {
@@ -21,6 +21,13 @@ export default function DashboardPage() {
     const [datosVentas, setDatosVentas] = useState<VentaMes[]>([]);
     const [totalPeriodo, setTotalPeriodo] = useState<string>('$0');
     const [loadingVentas, setLoadingVentas] = useState<boolean>(true);
+
+    const [stats, setStats] = useState({
+        stockBajo: 0,
+        facturasPendientes: 0,
+        pedidosCamino: 0,
+        remitosValidar: 0
+    });
 
     useEffect(() => {
         const role = localStorage.getItem('user_role') || 'ADMIN';
@@ -35,36 +42,24 @@ export default function DashboardPage() {
             const savedPhoto = localStorage.getItem('user_avatar');
             if (savedPhoto) setUserPhoto(savedPhoto);
 
-            cargarDatosVentasReales(role);
+            cargarDatosReales(role);
         }
     }, [router]);
 
-    const cargarDatosVentasReales = async (role: string) => {
+    const cargarDatosReales = async (role: string) => {
         setLoadingVentas(true);
         try {
-            const esAdmin = role === 'ADMIN';
-            const mockData = esAdmin
-                ? [
-                    { mes: 'Mar', montoTexto: '$1.2M', valorNumerico: 1.2 },
-                    { mes: 'Abr', montoTexto: '$1.5M', valorNumerico: 1.5 },
-                    { mes: 'May', montoTexto: '$1.4M', valorNumerico: 1.4 },
-                    { mes: 'Jun', montoTexto: '$1.9M', valorNumerico: 1.9 },
-                    { mes: 'Jul', montoTexto: '$2.2M', valorNumerico: 2.2 },
-                    { mes: 'Ago', montoTexto: '$2.4M', valorNumerico: 2.4 },
-                ]
-                : [
-                    { mes: 'Mar', montoTexto: '$0.3M', valorNumerico: 0.3 },
-                    { mes: 'Abr', montoTexto: '$0.4M', valorNumerico: 0.4 },
-                    { mes: 'May', montoTexto: '$0.4M', valorNumerico: 0.4 },
-                    { mes: 'Jun', montoTexto: '$0.6M', valorNumerico: 0.6 },
-                    { mes: 'Jul', montoTexto: '$0.7M', valorNumerico: 0.7 },
-                    { mes: 'Ago', montoTexto: '$0.8M', valorNumerico: 0.8 },
-                ];
+            // Ejecutamos ambas consultas en paralelo a la base de datos
+            const [metricasOp, ventasRes] = await Promise.all([
+                getDashboardStats(),
+                getSalesEvolution(role)
+            ]);
 
-            setDatosVentas(mockData);
-            setTotalPeriodo(esAdmin ? '$10.6M' : '$3.2M (Personal)');
+            setStats(metricasOp);
+            setDatosVentas(ventasRes.datosVentas);
+            setTotalPeriodo(ventasRes.totalPeriodo);
         } catch (error) {
-            console.error('Error al cargar la evolución de ventas', error);
+            console.error('Error al cargar datos del dashboard:', error);
         } finally {
             setLoadingVentas(false);
         }
@@ -173,12 +168,21 @@ export default function DashboardPage() {
                                     </div>
                                     <span className="text-emerald-600 font-bold text-[10px] self-end opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                                 </Link>
+
+                                <Link href="/clientes" className="bg-white p-2 rounded-md border border-slate-200/80 shadow-xs hover:border-emerald-600 transition-all flex flex-col justify-between group min-h-[55px]">
+                                    <div className="space-y-0.5">
+                                        <span className="text-[8px] font-bold text-slate-400 uppercase">CRM / Contactos</span>
+                                        <h3 className="text-[11px] font-bold text-slate-900 group-hover:text-emerald-700 leading-tight">Gestión de Clientes</h3>
+                                        <p className="text-[9px] text-slate-500 line-clamp-1">Base de datos y perfiles.</p>
+                                    </div>
+                                    <span className="text-emerald-600 font-bold text-[10px] self-end opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                                </Link>
                             </>
                         )}
                     </div>
                 </div>
 
-                {/* EVOLUCIÓN DE VENTAS */}
+                {/* EVOLUCIÓN DE VENTAS REAL */}
                 <div className="bg-white border border-slate-200/80 rounded-md shadow-xs p-3 flex-1 flex flex-col justify-between">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 shrink-0">
                         <div className="flex items-center gap-1.5">
@@ -188,13 +192,13 @@ export default function DashboardPage() {
                             </h3>
                         </div>
                         <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                            +14.2% vs período anterior
+                            Sincronizado DB
                         </span>
                     </div>
 
                     {loadingVentas ? (
                         <div className="flex items-center justify-center h-36 text-xs text-slate-400 font-semibold animate-pulse">
-                            Calculando facturación real...
+                            Consultando transacciones reales...
                         </div>
                     ) : (
                         <div className="grid grid-cols-6 gap-3 items-end h-36 pt-6 pb-1 px-2 my-auto">
@@ -215,7 +219,7 @@ export default function DashboardPage() {
                                             </span>
                                             <div
                                                 className={`w-full rounded-t-xs transition-all duration-300 ${colorClase}`}
-                                                style={{ height: `${porcentajeAltura}%` }}
+                                                style={{ height: `${porcentajeAltura > 0 ? porcentajeAltura : 4}%` }}
                                             />
                                             <span className="text-[10px] font-bold text-slate-700 mt-1.5">
                                                 {item.mes}
@@ -254,21 +258,13 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2.5 py-1">
                         <div className="relative group shrink-0">
                             {userPhoto ? (
-                                <img
-                                    src={userPhoto}
-                                    alt="Usuario"
-                                    className="w-10 h-10 rounded-full object-cover border-2 border-emerald-500 shadow-xs"
-                                />
+                                <img src={userPhoto} alt="Usuario" className="w-10 h-10 rounded-full object-cover border-2 border-emerald-500 shadow-xs" />
                             ) : (
                                 <div className="w-10 h-10 rounded-full bg-slate-800 text-white font-black text-xs flex items-center justify-center tracking-wider border border-slate-300">
                                     {userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                                 </div>
                             )}
-                            <label
-                                htmlFor="avatar-upload"
-                                className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[8px] font-bold text-white text-center"
-                                title="Cambiar Foto"
-                            >
+                            <label htmlFor="avatar-upload" className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[8px] font-bold text-white text-center" title="Cambiar Foto">
                                 📷
                             </label>
                             <input id="avatar-upload" type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
@@ -301,25 +297,19 @@ export default function DashboardPage() {
 
                         <Link href="/caja" className="flex items-center justify-between text-[9px] p-1.5 bg-slate-50 hover:bg-amber-50/60 rounded border border-slate-200/60 transition-colors group">
                             <span className="font-semibold text-slate-700 group-hover:text-amber-900">⌛ Cierre de Caja</span>
-                            <span className="font-bold text-amber-800 bg-amber-100 px-1 py-0.5 rounded border border-amber-200">
-                                Pendiente →
-                            </span>
+                            <span className="font-bold text-amber-800 bg-amber-100 px-1 py-0.5 rounded border border-amber-200">Pendiente →</span>
                         </Link>
 
                         {esAdmin && (
                             <Link href="/stock" className="flex items-center justify-between text-[9px] p-1.5 bg-slate-50 hover:bg-emerald-50/60 rounded border border-slate-200/60 transition-colors group">
                                 <span className="font-semibold text-slate-700 group-hover:text-emerald-900">✓ Recepción Insumos</span>
-                                <span className="font-bold text-emerald-800 bg-emerald-100 px-1 py-0.5 rounded border border-emerald-200">
-                                    Listo →
-                                </span>
+                                <span className="font-bold text-emerald-800 bg-emerald-100 px-1 py-0.5 rounded border border-emerald-200">Listo →</span>
                             </Link>
                         )}
 
                         <Link href="/stock" className="flex items-center justify-between text-[9px] p-1.5 bg-slate-50 hover:bg-slate-100 rounded border border-slate-200/60 transition-colors group">
                             <span className="font-semibold text-slate-700">📅 Arqueo de Stock</span>
-                            <span className="font-bold text-slate-500 bg-slate-200 px-1 py-0.5 rounded">
-                                18:00 Hs →
-                            </span>
+                            <span className="font-bold text-slate-500 bg-slate-200 px-1 py-0.5 rounded">18:00 Hs →</span>
                         </Link>
                     </div>
                 </div>
@@ -344,7 +334,7 @@ export default function DashboardPage() {
                             <Link href="/ventas" className="bg-slate-50 hover:bg-slate-100/80 p-2 rounded border border-slate-200/60 flex flex-col justify-between transition-all group">
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Facturas</span>
                                 <div className="flex items-baseline justify-between mt-2">
-                                    <span className="text-xs font-black text-slate-900">{esAdmin ? '3' : '1'}</span>
+                                    <span className="text-xs font-black text-slate-900">{esAdmin ? stats.facturasPendientes : '1'}</span>
                                     <span className="text-[9px] font-bold text-amber-800 bg-amber-100 px-1 py-0.5 rounded">Cobrar →</span>
                                 </div>
                             </Link>
@@ -354,7 +344,7 @@ export default function DashboardPage() {
                                     <Link href="/compras" className="bg-slate-50 hover:bg-slate-100/80 p-2 rounded border border-slate-200/60 flex flex-col justify-between transition-all group">
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Pedidos</span>
                                         <div className="flex items-baseline justify-between mt-2">
-                                            <span className="text-xs font-bold text-slate-900">5</span>
+                                            <span className="text-xs font-bold text-slate-900">{stats.pedidosCamino}</span>
                                             <span className="text-[9px] font-bold text-sky-800 bg-sky-100 px-1 py-0.5 rounded">Camino →</span>
                                         </div>
                                     </Link>
@@ -362,7 +352,7 @@ export default function DashboardPage() {
                                     <Link href="/compras" className="bg-slate-50 hover:bg-slate-100/80 p-2 rounded border border-slate-200/60 flex flex-col justify-between transition-all group">
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Remitos</span>
                                         <div className="flex items-baseline justify-between mt-2">
-                                            <span className="text-xs font-black text-slate-900">2</span>
+                                            <span className="text-xs font-black text-slate-900">{stats.remitosValidar}</span>
                                             <span className="text-[9px] font-bold text-purple-800 bg-purple-100 px-1 py-0.5 rounded">Validar →</span>
                                         </div>
                                     </Link>
@@ -372,7 +362,7 @@ export default function DashboardPage() {
                             <Link href="/stock" className="bg-slate-50 hover:bg-slate-100/80 p-2 rounded border border-slate-200/60 flex flex-col justify-between transition-all group">
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Stock Bajo</span>
                                 <div className="flex items-baseline justify-between mt-2">
-                                    <span className="text-xs font-black text-slate-900">4</span>
+                                    <span className="text-xs font-black text-slate-900">{stats.stockBajo}</span>
                                     <span className="text-[9px] font-bold text-rose-800 bg-rose-100 px-1 py-0.5 rounded">Alerta →</span>
                                 </div>
                             </Link>

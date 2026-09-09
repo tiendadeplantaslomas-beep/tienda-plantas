@@ -126,13 +126,24 @@ export async function createCashMovement(payload: {
     try {
         const { type, description, amount } = payload;
 
+        // 1. Validaciones básicas de formato
         if (!description || !amount || amount <= 0) {
             return { success: false, error: 'Monto o descripción inválidos.' };
         }
 
-        // Si es EGRESO, guardamos el monto negativo en la BD
-        const finalAmount = type === 'EGRESO' ? -Math.abs(Math.round(amount)) : Math.abs(Math.round(amount));
+        // 2. Validación de Cierre de Caja (Evita alterar días ya cerrados y bloqueados)
+        const todayStr = new Date().toISOString().split('T')[0];
+        const dayLocked = await isDayClosed(todayStr);
+        if (dayLocked) {
+            return { success: false, error: 'OPERACIÓN DENEGADA: La caja del día de hoy ya fue cerrada y bloqueada.' };
+        }
 
+        // 3. Ajuste de monto: Si es EGRESO, guardamos en negativo. 
+        // Usamos redondeo a 2 decimales para preservar centavos correctamente en lugar de Math.round entero.
+        const cleanAmount = Number(amount.toFixed(2));
+        const finalAmount = type === 'EGRESO' ? -Math.abs(cleanAmount) : Math.abs(cleanAmount);
+
+        // 4. Crear el movimiento en la Base de Datos
         const newMovement = await prisma.cashMovement.create({
             data: {
                 type,
@@ -143,8 +154,63 @@ export async function createCashMovement(payload: {
 
         revalidatePath('/caja');
         return { success: true, data: newMovement };
+
     } catch (error: any) {
         console.error('Error al crear movimiento de caja:', error);
-        return { success: false, error: 'No se pudo guardar el movimiento.' };
+        return { success: false, error: error.message || 'No se pudo guardar el movimiento.' };
+    }
+}
+
+// 3. Verificar si un día específico ya se encuentra cerrado/bloqueado
+export async function isDayClosed(dateStr: string): Promise<boolean> {
+    try {
+        const closure = await prisma.cashClosure.findUnique({
+            where: { date: dateStr }
+        });
+        return !!closure; // Devuelve true si ya está cerrado
+    } catch (error) {
+        console.error('Error al verificar cierre de caja:', error);
+        return false;
+    }
+}
+
+// 4. Ejecutar el Cierre Formal del Día (Bloqueo de Caja)
+export async function closeDailyCash(payload: {
+    date: string; // Formato 'YYYY-MM-DD'
+    closedBy?: string;
+    notes?: string;
+}) {
+    try {
+        const { date, closedBy, notes } = payload;
+
+        // A. Verificar si ya está cerrado para evitar duplicados
+        const alreadyClosed = await isDayClosed(date);
+        if (alreadyClosed) {
+            return { success: false, error: 'El día seleccionado ya se encuentra cerrado y bloqueado.' };
+        }
+
+        // B. Recalcular los totales oficiales del día usando tu función existente
+        const summary = await getCajaSummary(date);
+        if (!summary.success) {
+            return { success: false, error: 'No se pudieron calcular los totales para cerrar el día.' };
+        }
+
+        // C. Registrar el cierre definitivo en la base de datos
+        const closure = await prisma.cashClosure.create({
+            data: {
+                date: summary.date, // 'YYYY-MM-DD'
+                totalSales: summary.totals.TOTAL_VENTAS,
+                netCash: summary.totals.EFECTIVO_EN_CAJA_NETO,
+                closedBy: closedBy ? closedBy.toUpperCase().trim() : 'ADMINISTRADOR',
+                notes: notes ? notes.toUpperCase().trim() : 'CIERRE DE TURNO / ARQUEO DIARIO OK',
+            }
+        });
+
+        revalidatePath('/caja');
+        return { success: true, closure };
+
+    } catch (error: any) {
+        console.error('Error al cerrar la caja del día:', error);
+        return { success: false, error: error.message || 'Error crítico al procesar el cierre de caja.' };
     }
 }

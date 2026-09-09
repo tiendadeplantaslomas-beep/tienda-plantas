@@ -2,58 +2,95 @@
 
 import { prisma } from '@/lib/db';
 import { cookies } from 'next/headers';
-import { revalidatePath } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 
-export async function updateCustomerAvatar(formData: FormData) {
+// 1. Obtener perfil completo y sus compras asociadas
+export async function getCustomerProfileWithOrders() {
     try {
-        // 1. Leer la cookie de sesión segura
         const cookieStore = await cookies();
         const sessionCookie = cookieStore.get('customer_session');
 
         if (!sessionCookie) {
-            return { success: false, error: 'No se encontró una sesión activa. Por favor inicia sesión nuevamente.' };
+            return { success: false, error: 'No hay una sesión activa.' };
         }
 
         const sessionData = JSON.parse(sessionCookie.value);
         const customerId = sessionData.id;
 
-        if (!customerId) {
-            return { success: false, error: 'ID de cliente requerido.' };
+        // Buscar al cliente en la base de datos
+        const customer = await prisma.customer.findUnique({
+            where: { id: customerId }
+        });
+
+        if (!customer) {
+            return { success: false, error: 'Cliente no encontrado.' };
         }
 
-        // 2. Obtener los datos del formulario (la imagen o el estilo)
-        const imageUrl = formData.get('image_url')?.toString();
-        const gender = formData.get('gender')?.toString();
+        // Buscar las ventas/pedidos realizados por este cliente
+        // (Asegúrate de que tu modelo Sale o Order tenga un campo customerId o email que los relacione)
+        const orders = await prisma.sale.findMany({
+            where: {
+                OR: [
+                    { customerId: customerId },
+                    { email: customer.email } // Respaldo por si se vincula por email
+                ]
+            },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                items: true // Trae los productos de cada compra si tu esquema lo soporta
+            }
+        });
 
-        // 3. Actualizar el registro en la tabla Customer usando Prisma
+        const { password_hash, verification_token, ...safeCustomer } = customer;
+
+        return {
+            success: true,
+            customer: safeCustomer,
+            orders: orders || []
+        };
+
+    } catch (error) {
+        console.error('Error al obtener perfil y compras:', error);
+        return { success: false, error: 'Error interno al cargar el perfil.' };
+    }
+}
+
+// 2. Actualizar datos del perfil (Dirección, Teléfono, etc.)
+export async function updateCustomerProfile(formData: {
+    name: string;
+    phone: string;
+    address: string;
+    dni_cuit: string;
+    gender: string;
+}) {
+    try {
+        const cookieStore = await cookies();
+        const sessionCookie = cookieStore.get('customer_session');
+
+        if (!sessionCookie) {
+            return { success: false, error: 'No autorizado.' };
+        }
+
+        const sessionData = JSON.parse(sessionCookie.value);
+        const customerId = sessionData.id;
+
+        // Actualizar en Prisma
         const updatedCustomer = await prisma.customer.update({
             where: { id: customerId },
             data: {
-                ...(imageUrl ? { image_url: imageUrl } : {}),
-                ...(gender ? { gender: gender } : {}),
-            },
-        });
-
-        // 4. Actualizar la cookie con los nuevos datos si es necesario
-        cookieStore.set({
-            name: 'customer_session',
-            value: JSON.stringify({
-                id: updatedCustomer.id,
-                email: updatedCustomer.email,
-                name: updatedCustomer.name,
-                image_url: updatedCustomer.image_url
-            }),
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            path: '/',
-            maxAge: 60 * 60 * 24 * 7,
+                name: formData.name.trim().toUpperCase(),
+                phone: formData.phone.trim(),
+                address: formData.address.trim().toUpperCase(),
+                dni_cuit: formData.dni_cuit.trim(),
+                gender: formData.gender
+            }
         });
 
         revalidatePath('/tienda/perfil');
-        return { success: true, customer: updatedCustomer };
+        return { success: true, message: 'Perfil actualizado correctamente.', customer: updatedCustomer };
 
     } catch (error) {
-        console.error('Error al actualizar el avatar:', error);
-        return { success: false, error: 'Ocurrió un error al actualizar la imagen en la base de datos.' };
+        console.error('Error al actualizar perfil:', error);
+        return { success: false, error: 'No se pudo actualizar el perfil.' };
     }
 }

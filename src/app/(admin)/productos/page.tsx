@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Product, Category, Supplier, SortField, SortOrder } from '@/types/product';
-import { CategoryInlineForm } from '@/components/products/CategoryInlineForm';
 
 import {
     getCategories,
@@ -88,6 +87,78 @@ function SupplierInlineForm({
 }
 
 // ----------------------------------------------------------------------
+// COMPONENTE AUXILIAR INLINE (Categoría)
+// ----------------------------------------------------------------------
+
+function CategoryInlineForm({
+    initialName = '',
+    onClose,
+    onSuccess
+}: {
+    initialName?: string;
+    onClose: () => void;
+    onSuccess: (category: Category) => void;
+}) {
+    const [name, setName] = useState(initialName);
+    const [defaultMargin, setDefaultMargin] = useState<number | ''>(100);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleSubmit = async () => {
+        setError(null);
+        const cleanName = name.trim().toUpperCase();
+        if (!cleanName) {
+            setError('El nombre de la categoría es obligatorio.');
+            return;
+        }
+        const marginVal = defaultMargin === '' ? 100 : Number(defaultMargin);
+
+        try {
+            const res = await createCategory({ name: cleanName, defaultMargin: marginVal });
+            if (res.error) {
+                setError(res.error);
+            } else if (res.category) {
+                onSuccess(res.category as Category);
+            }
+        } catch {
+            setError('Error al guardar la categoría.');
+        }
+    };
+
+    return (
+        <div className="absolute top-7 left-0 w-80 z-50 bg-emerald-50 text-emerald-950 p-2.5 rounded-lg border border-emerald-300 space-y-2 shadow-xl animate-in fade-in">
+            <div className="flex justify-between items-center text-[10px] font-bold text-emerald-800 uppercase">
+                <span>🏷️ Nueva Categoría Inline</span>
+                <button type="button" onClick={onClose} className="text-emerald-700 hover:text-emerald-950 font-bold cursor-pointer">✕</button>
+            </div>
+            <div className="flex gap-1.5 items-center">
+                <input
+                    type="text"
+                    autoFocus
+                    placeholder="NOMBRE"
+                    value={name}
+                    onChange={(e) => setName(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                    className="flex-1 bg-white border border-emerald-300 rounded px-2 py-1 text-xs font-bold uppercase text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+                <input
+                    type="number"
+                    step="any"
+                    placeholder="MARGEN %"
+                    value={defaultMargin}
+                    onChange={(e) => setDefaultMargin(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                    className="w-24 bg-white border border-emerald-300 rounded px-1.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+                <button type="button" onClick={handleSubmit} className="bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-bold rounded text-white shadow-sm shrink-0 cursor-pointer">
+                    ✓
+                </button>
+            </div>
+            {error && <p className="text-[10px] text-rose-600 font-bold">⚠️ {error}</p>}
+        </div>
+    );
+}
+
+// ----------------------------------------------------------------------
 // COMPONENTE PRINCIPAL
 // ----------------------------------------------------------------------
 
@@ -95,22 +166,18 @@ export default function ProductosPage() {
     const [fechaActual, setFechaActual] = useState('');
     const [tabActiva, setTabActiva] = useState('catalogo');
 
-    // Constante para el límite de tamaño de imagen (2 MB)
     const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
-    // Estados de datos principales
     const [categories, setCategories] = useState<Category[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Visibilidad de Paneles y Modales
     const [showProductForm, setShowProductForm] = useState(false);
     const [showCategoryPanel, setShowCategoryPanel] = useState(false);
     const [showSupplierPanel, setShowSupplierPanel] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
 
-    // Estado para Ajuste Rápido de Stock
     const [showStockModal, setShowStockModal] = useState(false);
     const [selectedProductForStock, setSelectedProductForStock] = useState<Product | null>(null);
     const [stockAdjustmentType, setStockAdjustmentType] = useState<'IN' | 'OUT' | 'ADJUSTMENT'>('IN');
@@ -120,12 +187,11 @@ export default function ProductosPage() {
     const [showInlineCat, setShowInlineCat] = useState(false);
     const [showInlineSup, setShowInlineSup] = useState(false);
 
-    // Formulario Standalone Proveedor
+    const [catFormData, setCatFormData] = useState({ name: '', defaultMargin: 100 });
     const [supFormData, setSupFormData] = useState({ name: '', phone: '', address: '' });
     const [catPanelError, setCatPanelError] = useState<string | null>(null);
     const [supPanelError, setSupPanelError] = useState<string | null>(null);
 
-    // Formulario de Producto
     const [id, setId] = useState<string | null>(null);
     const [code, setCode] = useState('');
     const [name, setName] = useState('');
@@ -145,30 +211,22 @@ export default function ProductosPage() {
     const [stock, setStock] = useState<number | ''>(0);
     const [minStock, setMinStock] = useState<number | ''>(2);
     const [imageUrl, setImageUrl] = useState('');
-    const [imageError, setImageError] = useState<string | null>(null); // Estado para error de imagen
+    const [imageError, setImageError] = useState<string | null>(null);
 
-    // Mensajería Global
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-    // Ordenamiento, Filtro y Paginación
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
-    // Importación / Exportación
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importing, setImporting] = useState(false);
 
-    // Referencias DOM
     const catRef = useRef<HTMLDivElement>(null);
     const supRef = useRef<HTMLDivElement>(null);
     const formRef = useRef<HTMLDivElement>(null);
-
-    // ----------------------------------------------------------------------
-    // EFECTOS Y LÓGICA DE NEGOCIO
-    // ----------------------------------------------------------------------
 
     useEffect(() => {
         const hoy = new Date();
@@ -217,6 +275,7 @@ export default function ProductosPage() {
 
     const resetPanels = () => {
         setCatPanelError(null);
+        setCatFormData({ name: '', defaultMargin: 100 });
         setSupFormData({ name: '', phone: '', address: '' });
         setSupPanelError(null);
     };
@@ -246,7 +305,17 @@ export default function ProductosPage() {
             const [cats, sups, prods] = await Promise.all([getCategories(), getSuppliers(), getProducts()]);
             setCategories(cats as Category[]);
             setSuppliers(sups as Supplier[]);
-            setProducts(prods as Product[]);
+
+            // Manejo robusto adaptado a Prisma / Server Actions
+            if (Array.isArray(prods)) {
+                setProducts(prods as Product[]);
+            } else if (prods && typeof prods === 'object' && 'products' in prods) {
+                setProducts((prods as any).products);
+            } else if (prods && typeof prods === 'object' && 'data' in prods) {
+                setProducts((prods as any).data);
+            } else {
+                setProducts([]);
+            }
         } catch {
             setMessage({ type: 'error', text: 'Error al conectar con la base de datos.' });
         } finally {
@@ -264,6 +333,32 @@ export default function ProductosPage() {
         let subtotalNoTax = marginVal >= 100 ? totalBaseCost * (1 + marginVal / 100) : totalBaseCost / (1 - (marginVal / 100));
         const finalWithTax = subtotalNoTax * (1 + (cTax || 0) / 100);
         setPriceFinal(Math.round(finalWithTax));
+    };
+
+    const handleSaveCategoryStandalone = async () => {
+        setCatPanelError(null);
+        const cleanName = catFormData.name.trim().toUpperCase();
+        if (!cleanName) {
+            setCatPanelError('El nombre de la categoría es obligatorio.');
+            return;
+        }
+
+        try {
+            const res = await createCategory({
+                name: cleanName,
+                defaultMargin: Number(catFormData.defaultMargin) || 0
+            });
+            if (res.error) {
+                setCatPanelError(res.error);
+            } else if (res.category) {
+                setMessage({ type: 'success', text: `Categoría "${res.category.name}" creada exitosamente.` });
+                setCategories(prev => [...prev, res.category as Category]);
+                resetPanels();
+                setShowCategoryPanel(false);
+            }
+        } catch {
+            setCatPanelError('Error al guardar la categoría.');
+        }
     };
 
     const handleSaveSupplierStandalone = async () => {
@@ -294,14 +389,17 @@ export default function ProductosPage() {
     };
 
     const handleSelectCategory = async (cat: Category) => {
-        setCategoryId(cat.id);
-        setCategorySearch(cat.name);
-        setShowCatDropdown(false);
-        setMargin(cat.defaultMargin ?? 100);
-        computePrices(Number(cost), Number(otherCosts), cat.defaultMargin ?? 100, taxRate);
-        if (!id) {
+        if (categoryId !== cat.id) {
+            setCategoryId(cat.id);
+            setCategorySearch(cat.name);
+            setShowCatDropdown(false);
+            setMargin(cat.defaultMargin ?? 100);
+            computePrices(Number(cost), Number(otherCosts), cat.defaultMargin ?? 100, taxRate);
+
             const nextCode = await generateNextProductCode(cat.id);
             setCode(nextCode);
+        } else {
+            setShowCatDropdown(false);
         }
     };
 
@@ -359,7 +457,6 @@ export default function ProductosPage() {
         }
     };
 
-    // Manejador seguro con actualización de error local para la imagen (máx 2 MB)
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -531,10 +628,6 @@ export default function ProductosPage() {
     const filteredCats = categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()));
     const filteredSups = suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
 
-    // ----------------------------------------------------------------------
-    // RENDERIZADO VISUAL
-    // ----------------------------------------------------------------------
-
     return (
         <div className="w-full min-h-[calc(100vh-4rem)] flex flex-col font-sans text-slate-800 pb-4 max-w-7xl mx-auto">
             <div className="bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6 space-y-4">
@@ -661,8 +754,32 @@ export default function ProductosPage() {
                             <button type="button" onClick={() => setShowCategoryPanel(false)} className="text-slate-400 hover:text-white font-bold cursor-pointer">✕</button>
                         </div>
                         {catPanelError && <p className="text-[10px] text-rose-400 font-bold bg-rose-950/50 p-1.5 rounded border border-rose-800">⚠️ {catPanelError}</p>}
-                        <div className="text-[10px] text-slate-300">
-                            <p>Para crear categorías de forma rápida podés utilizar directamente el botón de <strong>+ Inline</strong> dentro del formulario del producto.</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-[8px] font-bold text-slate-300 uppercase mb-0.5">Nombre de Categoría *</label>
+                                <input
+                                    type="text"
+                                    placeholder="EJ. ARBUSTOS"
+                                    value={catFormData.name}
+                                    onChange={(e) => setCatFormData({ ...catFormData, name: e.target.value.toUpperCase() })}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white uppercase focus:outline-none focus:border-emerald-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[8px] font-bold text-slate-300 uppercase mb-0.5">Margen Predeterminado (%)</label>
+                                <input
+                                    type="number"
+                                    step="any"
+                                    placeholder="100"
+                                    value={catFormData.defaultMargin}
+                                    onChange={(e) => setCatFormData({ ...catFormData, defaultMargin: e.target.value === '' ? '' : Number(e.target.value) })}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white focus:outline-none focus:border-emerald-500"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-1.5 pt-1">
+                            <button type="button" onClick={() => setShowCategoryPanel(false)} className="px-2.5 py-1 text-[10px] text-slate-300 hover:text-white cursor-pointer">Cancelar</button>
+                            <button type="button" onClick={handleSaveCategoryStandalone} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded shadow-2xs cursor-pointer">Guardar</button>
                         </div>
                     </div>
                 )}
@@ -765,7 +882,6 @@ export default function ProductosPage() {
                         }} className="space-y-2.5">
 
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
-                                {/* VISTA PREVIA DE IMAGEN EN FORMULARIO */}
                                 <div className="flex flex-col items-center justify-center p-1 bg-slate-50 border border-slate-200 rounded">
                                     <span className="block text-[8px] font-bold text-slate-500 uppercase mb-1">Vista Previa</span>
                                     <div className="w-14 h-14 relative rounded overflow-hidden border border-slate-300 bg-white flex items-center justify-center">
@@ -780,7 +896,6 @@ export default function ProductosPage() {
                                     </div>
                                 </div>
 
-                                {/* SELECTOR DE ARCHIVO (UPLOAD) */}
                                 <div className="md:col-span-3">
                                     <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Subir Imagen desde la PC (Opcional)</label>
                                     <input
@@ -1025,7 +1140,6 @@ export default function ProductosPage() {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-emerald-50/50 p-2.5 rounded border border-emerald-100">
-                                {/* PRECIO FINAL CALCULADO */}
                                 <div className="flex flex-col justify-center">
                                     <label className="block text-[8px] font-bold text-emerald-900 uppercase">Precio Final (Con IVA)</label>
                                     <div className="text-sm font-black text-emerald-700">
@@ -1033,7 +1147,6 @@ export default function ProductosPage() {
                                     </div>
                                 </div>
 
-                                {/* STOCKS */}
                                 <div>
                                     <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Stock Actual</label>
                                     <input
@@ -1221,12 +1334,10 @@ export default function ProductosPage() {
                     </div>
                 )}
 
-                {/* TABLA PRINCIPAL Y PESTAÑAS */}
-                <div className="bg-stone-50 dark:bg-stone-900 p-6 rounded-xl shadow-md border border-stone-200 dark:border-stone-800">
-                    {/* BARRA DE PESTAÑAS Y BÚSQUEDA */}
-                    <div className="p-2 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2 shrink-0">
+                {/* TABLA PRINCIPAL Y PESTAÑAS (CORREGIDO CON SPACE-Y-4 Y OVERFLOW-X-AUTO LIMPIO) */}
+                <div className="bg-stone-50 dark:bg-stone-900 p-4 md:p-6 rounded-xl shadow-md border border-stone-200 dark:border-stone-800 space-y-4">
+                    <div className="p-2 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2">
 
-                        {/* PESTAÑAS */}
                         <div className="flex items-center gap-1 bg-slate-200/60 p-0.5 rounded">
                             <button
                                 type="button"
@@ -1244,7 +1355,6 @@ export default function ProductosPage() {
                             </button>
                         </div>
 
-                        {/* BÚSQUEDA Y PAGINACIÓN */}
                         <div className="flex items-center gap-1.5">
                             <div className="relative flex-1 sm:w-56">
                                 <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-slate-400 text-[10px]">🔍</span>
@@ -1281,8 +1391,7 @@ export default function ProductosPage() {
 
                     </div>
 
-                    {/* ESTRUCTURA DE LA TABLA */}
-                    <div className="flex-1 overflow-x-auto flex flex-col justify-between">
+                    <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-100/70 border-b border-slate-200 text-[9px] font-extrabold text-slate-600 uppercase tracking-wider select-none">
@@ -1414,8 +1523,7 @@ export default function ProductosPage() {
                         </table>
                     </div>
 
-                    {/* PAGINACIÓN FIJA AL PIE */}
-                    <div className="p-2.5 border-t border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-slate-600 shrink-0">
+                    <div className="p-2.5 border-t border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-slate-600">
                         <div>
                             Mostrando del <span className="font-bold text-slate-700">{totalItems > 0 ? startIndex + 1 : 0}</span> al <span className="font-bold text-slate-700">{Math.min(startIndex + itemsPerPage, totalItems)}</span> de <span className="font-bold text-slate-700">{totalItems}</span> registros
                         </div>

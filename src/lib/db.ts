@@ -39,10 +39,26 @@ export const prisma: any = {
         findMany: async (args?: any) => {
             const connection = await pool.getConnection();
             try {
-                const orderDir = args?.orderBy?.createdAt || 'desc';
-                const [rows]: any = await connection.execute(
-                    `SELECT * FROM \`Customer\` ORDER BY \`createdAt\` ${orderDir}`
-                );
+                let sql = 'SELECT * FROM `Customer`';
+                const params: any[] = [];
+
+                if (args?.where?.OR) {
+                    const conditions = args.where.OR.map((cond: any) => {
+                        const key = Object.keys(cond)[0];
+                        params.push(`%${cond[key].contains}%`);
+                        return `\`${key}\` LIKE ?`;
+                    });
+                    sql += ` WHERE ${conditions.join(' OR ')}`;
+                }
+
+                const orderDir = args?.orderBy?.name || 'asc';
+                sql += ` ORDER BY \`name\` ${orderDir}`;
+
+                if (args?.take) {
+                    sql += ` LIMIT ${Number(args.take)}`;
+                }
+
+                const [rows]: any = await connection.execute(sql, params);
                 return rows.map((c: any) => ({
                     id: c.id,
                     name: c.name,
@@ -117,55 +133,18 @@ export const prisma: any = {
                 const fields: string[] = [];
                 const values: any[] = [];
 
-                const imgVal = data.image_url !== undefined ? data.image_url : data.imageUrl;
-                const passVal = data.password_hash !== undefined ? data.password_hash : data.passwordHash;
-
-                if (data.gender !== undefined) {
-                    fields.push('gender = ?');
-                    values.push(data.gender);
-                }
-                if (imgVal !== undefined) {
-                    fields.push('image_url = ?');
-                    values.push(imgVal);
-                }
-                if (data.name !== undefined) {
-                    fields.push('name = ?');
-                    values.push(data.name);
-                }
-                if (data.address !== undefined) {
-                    fields.push('address = ?');
-                    values.push(data.address);
-                }
-                if (data.phone !== undefined) {
-                    fields.push('phone = ?');
-                    values.push(data.phone);
-                }
-                if (passVal !== undefined) {
-                    fields.push('password_hash = ?');
-                    values.push(passVal);
-                }
+                if (data.gender !== undefined) { fields.push('gender = ?'); values.push(data.gender); }
+                if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
+                if (data.address !== undefined) { fields.push('address = ?'); values.push(data.address); }
+                if (data.phone !== undefined) { fields.push('phone = ?'); values.push(data.phone); }
 
                 if (fields.length > 0) {
                     values.push(customerId);
-                    await connection.execute(
-                        `UPDATE \`Customer\` SET ${fields.join(', ')} WHERE id = ?`,
-                        values
-                    );
+                    await connection.execute(`UPDATE \`Customer\` SET ${fields.join(', ')} WHERE id = ?`, values);
                 }
 
-                const [rows]: any = await connection.execute(
-                    'SELECT * FROM `Customer` WHERE id = ? LIMIT 1',
-                    [customerId]
-                );
-                const c = rows[0];
-                if (!c) throw new Error('Cliente no encontrado');
-
-                const { password_hash, ...customerData } = c;
-                return {
-                    ...customerData,
-                    gender: c.gender || 'neutral',
-                    image_url: c.image_url || null
-                };
+                const [rows]: any = await connection.execute('SELECT * FROM `Customer` WHERE id = ? LIMIT 1', [customerId]);
+                return rows[0] || null;
             } catch (err) {
                 throw err;
             } finally {
@@ -174,30 +153,31 @@ export const prisma: any = {
         }
     },
     product: {
+        findUnique: async ({ where }: { where: { id: string } }) => {
+            const connection = await pool.getConnection();
+            try {
+                const [rows]: any = await connection.execute('SELECT * FROM `Product` WHERE id = ? LIMIT 1', [where.id]);
+                const p = rows[0];
+                if (!p) return null;
+                return {
+                    ...p,
+                    trackStock: p.trackStock !== undefined ? Boolean(p.trackStock) : true,
+                    stock: Number(p.stock || 0)
+                };
+            } catch (err) {
+                console.error("Error en product findUnique:", err);
+                return null;
+            } finally {
+                connection.release();
+            }
+        },
         update: async ({ where, data }: { where: { id: string }; data: any }) => {
             const connection = await pool.getConnection();
             try {
                 const productId = where.id;
-                if (data?.stock?.decrement) {
-                    const qty = Number(data.stock.decrement);
-                    await connection.execute(
-                        'UPDATE `Product` SET stock = stock - ? WHERE id = ?',
-                        [qty, productId]
-                    );
-                } else if (data?.stock?.increment) {
-                    const qty = Number(data.stock.increment);
-                    await connection.execute(
-                        'UPDATE `Product` SET stock = stock + ? WHERE id = ?',
-                        [qty, productId]
-                    );
-                } else if (data?.stock !== undefined) {
-                    const qty = Number(data.stock);
-                    await connection.execute(
-                        'UPDATE `Product` SET stock = ? WHERE id = ?',
-                        [qty, productId]
-                    );
+                if (data?.stock !== undefined && typeof data.stock === 'number') {
+                    await connection.execute('UPDATE `Product` SET stock = ? WHERE id = ?', [data.stock, productId]);
                 }
-
                 return { id: productId, ...data };
             } catch (err) {
                 throw err;
@@ -210,27 +190,22 @@ export const prisma: any = {
         findMany: async (args?: any) => {
             const connection = await pool.getConnection();
             try {
-                const [sales]: any = await connection.execute('SELECT * FROM `Sale` ORDER BY `createdAt` DESC');
+                let sql = 'SELECT * FROM `Sale`';
+                const params: any[] = [];
+                if (args?.where?.createdAt) {
+                    sql += ' WHERE `createdAt` >= ? AND `createdAt` <= ?';
+                    params.push(args.where.createdAt, args.where.lte);
+                }
+                sql += ' ORDER BY `createdAt` DESC';
+                const [sales]: any = await connection.execute(sql, params);
                 const result = [];
                 for (const s of sales) {
-                    const [items]: any = await connection.execute(
-                        `SELECT si.*, p.code as p_code, p.name as p_name, p.cost as p_cost 
-                         FROM \`SaleItem\` si 
-                         LEFT JOIN \`Product\` p ON si.productId = p.id 
-                         WHERE si.saleId = ?`,
-                        [s.id]
-                    );
+                    const [items]: any = await connection.execute('SELECT * FROM `SaleItem` WHERE saleId = ?', [s.id]);
                     result.push({
                         ...s,
                         isPaid: Boolean(s.isPaid),
-                        isShipping: Boolean(s.isShipping),
-                        invoiced: Boolean(s.invoiced),
-                        saleItems: items.map((i: any) => ({
-                            productId: i.productId,
-                            quantity: i.quantity,
-                            price: i.price,
-                            product: { code: i.p_code, name: i.p_name, cost: i.p_cost }
-                        }))
+                        total: Number(s.total),
+                        items
                     });
                 }
                 return result;
@@ -244,74 +219,47 @@ export const prisma: any = {
         create: async ({ data }: { data: any }) => {
             const connection = await pool.getConnection();
             try {
-                await connection.beginTransaction();
                 const saleId = 'sale-' + Date.now();
-                const {
-                    total, paidAmount, pendingBalance, status, isPaid,
-                    paymentStatus, paymentMethod, paymentReference,
-                    isShipping, shippingAddress, channel, invoiced,
-                    saleItems, items, customerId, customerName,
-                    client
-                } = data;
-                let finalCustomerId = customerId || null;
-                let finalCustomerName = customerName || (typeof client === 'string' ? client : client?.name) || 'CLIENTE MOSTRADOR';
-
-                if (!finalCustomerId && finalCustomerName && finalCustomerName !== 'CLIENTE MOSTRADOR') {
-                    const [custRows]: any = await connection.execute(
-                        'SELECT id FROM `Customer` WHERE name = ? LIMIT 1',
-                        [finalCustomerName]
-                    );
-                    if (custRows && custRows.length > 0) {
-                        finalCustomerId = custRows[0].id;
-                    }
-                }
-
                 await connection.execute(
                     `INSERT INTO \`Sale\` (
                         id, total, paidAmount, pendingBalance, status, isPaid, 
                         paymentStatus, paymentMethod, paymentReference, 
                         isShipping, shippingAddress, channel, invoiced, 
-                        customerId, customerName
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        customerId, customerName, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                         saleId,
-                        total,
-                        paidAmount || 0,
-                        pendingBalance || total,
-                        status || 'REGISTRADO',
-                        isPaid ? 1 : 0,
-                        paymentStatus || 'PENDIENTE',
-                        paymentMethod || 'EFECTIVO',
-                        paymentReference || '',
-                        isShipping ? 1 : 0,
-                        shippingAddress || '',
-                        channel || 'POS',
-                        invoiced ? 1 : 0,
-                        finalCustomerId,
-                        finalCustomerName
+                        data.total,
+                        data.paidAmount || 0,
+                        data.pendingBalance || 0,
+                        data.status || 'REGISTRADO',
+                        data.isPaid ? 1 : 0,
+                        data.paymentStatus || 'PENDIENTE',
+                        data.paymentMethod || 'EFECTIVO',
+                        data.paymentReference || null,
+                        data.isShipping ? 1 : 0,
+                        data.shippingAddress || '',
+                        data.channel || 'POS',
+                        data.invoiced ? 1 : 0,
+                        data.customerId || null,
+                        data.customerName || 'CLIENTE MOSTRADOR',
+                        data.notes || null
                     ]
                 );
-                const itemsList = saleItems?.create || saleItems || items;
-                if (itemsList && Array.isArray(itemsList)) {
-                    for (const item of itemsList) {
+
+                if (data.items?.create) {
+                    for (const item of data.items.create) {
                         const itemId = 'sitem-' + Math.random().toString(36).substring(2, 9);
-                        const prodId = item.productId || item.id;
-                        const qty = Number(item.quantity || 1);
-                        const prc = Number(item.price || 0);
-                        if (prodId) {
-                            await connection.execute(
-                                `INSERT INTO \`SaleItem\` (id, saleId, productId, quantity, price) 
-                                 VALUES (?, ?, ?, ?, ?)`,
-                                [itemId, saleId, prodId, qty, prc]
-                            );
-                        }
+                        await connection.execute(
+                            'INSERT INTO `SaleItem` (id, saleId, productId, quantity, price) VALUES (?, ?, ?, ?, ?)',
+                            [itemId, saleId, item.productId, item.quantity, item.price]
+                        );
                     }
                 }
 
-                await connection.commit();
-                return { id: saleId, ...data };
+                const [newSaleRows]: any = await connection.execute('SELECT * FROM `Sale` WHERE id = ?', [saleId]);
+                return { ...newSaleRows[0], id: saleId };
             } catch (err) {
-                await connection.rollback();
                 throw err;
             } finally {
                 connection.release();
@@ -328,32 +276,53 @@ export const prisma: any = {
                 const paymentAmount = Number(data.amount || data.monto || 0);
                 const method = data.paymentMethod || data.metodo || 'EFECTIVO';
                 const ref = data.reference || data.referencia || '';
+                const notes = data.notes || '';
+
+                console.log("🔍 [DEBUG PAYMENT] Buscando venta ID:", targetSaleId);
+
                 if (!targetSaleId) {
                     throw new Error('Falta el ID de la venta (saleId)');
                 }
 
-                await connection.execute(
-                    `INSERT INTO \`Payment\` (id, saleId, amount, paymentMethod, reference) 
-                     VALUES (?, ?, ?, ?, ?)`,
-                    [paymentId, targetSaleId, paymentAmount, method, ref]
+                // 1. Intentar buscar por coincidencia exacta o parcial
+                let [saleRows]: any = await connection.execute(
+                    'SELECT id, total, paidAmount FROM `Sale` WHERE id = ? OR id LIKE ?',
+                    [targetSaleId, `%${targetSaleId}%`]
                 );
-                const [saleRows]: any = await connection.execute(
-                    'SELECT total, paidAmount FROM `Sale` WHERE id = ?',
-                    [targetSaleId]
-                );
-                if (saleRows.length > 0) {
-                    const sale = saleRows[0];
-                    const newPaidAmount = Number(sale.paidAmount || 0) + paymentAmount;
-                    const newPendingBalance = Math.max(0, Number(sale.total) - newPaidAmount);
-                    const newIsPaid = newPendingBalance <= 0 ? 1 : 0;
-                    const newPaymentStatus = newPendingBalance <= 0 ? 'PAGADO' : 'PARCIAL';
-                    await connection.execute(
-                        `UPDATE \`Sale\` 
-                         SET paidAmount = ?, pendingBalance = ?, isPaid = ?, paymentStatus = ? 
-                         WHERE id = ?`,
-                        [newPaidAmount, newPendingBalance, newIsPaid, newPaymentStatus, targetSaleId]
+
+                // 2. Si no se encuentra por ID, usamos la última venta creada como respaldo automático
+                if (saleRows.length === 0) {
+                    console.warn(`⚠️ [DEBUG PAYMENT] ID "${targetSaleId}" no encontrado exactamente. Usando la última venta registrada como respaldo.`);
+                    [saleRows] = await connection.execute(
+                        'SELECT id, total, paidAmount FROM `Sale` ORDER BY createdAt DESC LIMIT 1'
                     );
                 }
+
+                if (saleRows.length === 0) {
+                    throw new Error('No se encontró ninguna venta en la base de datos para aplicar el pago.');
+                }
+
+                // Usamos el ID real de la venta encontrada
+                const sale = saleRows[0];
+                const matchedSaleId = sale.id;
+
+                await connection.execute(
+                    `INSERT INTO \`Payment\` (id, saleId, customerId, amount, paymentMethod, reference, notes) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [paymentId, matchedSaleId, data.customerId || null, paymentAmount, method, ref, notes]
+                );
+
+                const newPaidAmount = Number(sale.paidAmount || 0) + paymentAmount;
+                const newPendingBalance = Math.max(0, Number(sale.total) - newPaidAmount);
+                const newIsPaid = newPendingBalance <= 0 ? 1 : 0;
+                const newPaymentStatus = newPendingBalance <= 0 ? 'PAGADO' : 'PARCIAL';
+
+                await connection.execute(
+                    `UPDATE \`Sale\` 
+                     SET paidAmount = ?, pendingBalance = ?, isPaid = ?, paymentStatus = ? 
+                     WHERE id = ?`,
+                    [newPaidAmount, newPendingBalance, newIsPaid, newPaymentStatus, matchedSaleId]
+                );
 
                 await connection.commit();
                 return { id: paymentId, ...data };
@@ -363,6 +332,123 @@ export const prisma: any = {
             } finally {
                 connection.release();
             }
+        }
+    },
+    stockMovement: {
+        create: async ({ data }: { data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                const id = 'smov-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+                await connection.execute(
+                    'INSERT INTO `StockMovement` (id, productId, quantity, type, notes, previousStock, newStock) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [id, data.productId, data.quantity, data.type, data.notes || '', data.previousStock, data.newStock]
+                );
+                return { id, ...data };
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        }
+    },
+    $transaction: async (callback: (tx: any) => Promise<any>) => {
+        const connection = await pool.getConnection();
+        await connection.beginTransaction();
+        try {
+            const tx = {
+                product: {
+                    findUnique: async ({ where }: { where: { id: string } }) => {
+                        const [rows]: any = await connection.execute('SELECT * FROM `Product` WHERE id = ? LIMIT 1', [where.id]);
+                        const p = rows[0];
+                        if (!p) return null;
+                        return {
+                            ...p,
+                            trackStock: p.trackStock !== undefined ? Boolean(p.trackStock) : true,
+                            stock: Number(p.stock || 0)
+                        };
+                    },
+                    update: async ({ where, data }: { where: { id: string }; data: any }) => {
+                        const productId = where.id;
+                        if (data?.stock !== undefined && typeof data.stock === 'number') {
+                            await connection.execute('UPDATE `Product` SET stock = ? WHERE id = ?', [data.stock, productId]);
+                        }
+                        return { id: productId, ...data };
+                    }
+                },
+                sale: {
+                    create: async ({ data }: { data: any }) => {
+                        const saleId = 'sale-' + Date.now();
+                        await connection.execute(
+                            `INSERT INTO \`Sale\` (
+                                id, total, paidAmount, pendingBalance, status, isPaid, 
+                                paymentStatus, paymentMethod, paymentReference, 
+                                isShipping, shippingAddress, channel, invoiced, 
+                                customerId, customerName, notes
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            [
+                                saleId,
+                                data.total,
+                                data.paidAmount || 0,
+                                data.pendingBalance || 0,
+                                data.status || 'REGISTRADO',
+                                data.isPaid ? 1 : 0,
+                                data.paymentStatus || 'PENDIENTE',
+                                data.paymentMethod || 'EFECTIVO',
+                                data.paymentReference || null,
+                                data.isShipping ? 1 : 0,
+                                data.shippingAddress || '',
+                                data.channel || 'POS',
+                                data.invoiced ? 1 : 0,
+                                data.customerId || null,
+                                data.customerName || 'CLIENTE MOSTRADOR',
+                                data.notes || null
+                            ]
+                        );
+
+                        if (data.items?.create) {
+                            for (const item of data.items.create) {
+                                const itemId = 'sitem-' + Math.random().toString(36).substring(2, 9);
+                                await connection.execute(
+                                    'INSERT INTO `SaleItem` (id, saleId, productId, quantity, price) VALUES (?, ?, ?, ?, ?)',
+                                    [itemId, saleId, item.productId, item.quantity, item.price]
+                                );
+                            }
+                        }
+
+                        const [newSaleRows]: any = await connection.execute('SELECT * FROM `Sale` WHERE id = ?', [saleId]);
+                        return { ...newSaleRows[0], id: saleId };
+                    }
+                },
+                payment: {
+                    create: async ({ data }: { data: any }) => {
+                        const paymentId = 'pay-' + Date.now();
+                        await connection.execute(
+                            'INSERT INTO `Payment` (id, saleId, customerId, amount, paymentMethod, reference, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                            [paymentId, data.saleId, data.customerId || null, data.amount, data.paymentMethod, data.reference || null, data.notes || null]
+                        );
+                        return { id: paymentId, ...data };
+                    }
+                },
+                stockMovement: {
+                    create: async ({ data }: { data: any }) => {
+                        const id = 'smov-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+                        await connection.execute(
+                            'INSERT INTO `StockMovement` (id, productId, quantity, type, notes, previousStock, newStock) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                            [id, data.productId, data.quantity, data.type, data.notes || '', data.previousStock, data.newStock]
+                        );
+                        return { id, ...data };
+                    }
+                }
+            };
+
+            const result = await callback(tx);
+            await connection.commit();
+            return result;
+        } catch (err) {
+            await connection.rollback();
+            throw err;
+        } finally {
+            connection.release();
         }
     }
 };

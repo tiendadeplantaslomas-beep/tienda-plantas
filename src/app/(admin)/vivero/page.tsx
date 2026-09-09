@@ -2,14 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { ModuloCatalogo } from './_components/ModuloCatalogo';
-import ModuloClientes from './_components/ModuloClientes';
 import VentasPage from './_components/ventas';
-import { getProducts, getCategories } from '@/actions/product-actions';
+import { getProducts, getCategories, getSuppliers } from '@/actions/product-actions';
 
 interface Category {
     id: string;
     name: string;
     defaultMargin: number;
+}
+
+interface Supplier {
+    id: string;
+    name: string;
 }
 
 interface Product {
@@ -19,7 +23,7 @@ interface Product {
     categoryId: string;
     category?: Category;
     supplierId?: string | null;
-    supplier?: any;
+    supplier?: Supplier;
     cost: number;
     otherCosts: number;
     price: number;
@@ -35,11 +39,13 @@ export default function ViveroPage() {
 
     const [productos, setProductos] = useState<Product[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const tabGuardada = localStorage.getItem('vivero_tab_activa');
-        if (tabGuardada) {
+        // Si por casualidad guardó 'clientes', lo forzamos a 'pos' para evitar pantallas rotas
+        if (tabGuardada && tabGuardada !== 'clientes') {
             setTabActiva(tabGuardada);
         }
 
@@ -49,9 +55,14 @@ export default function ViveroPage() {
 
         async function fetchData() {
             try {
-                const [prods, cats] = await Promise.all([getProducts(), getCategories()]);
+                const [prods, cats, sups] = await Promise.all([
+                    getProducts(),
+                    getCategories(),
+                    getSuppliers()
+                ]);
                 setProductos(prods as Product[]);
                 setCategories(cats as Category[]);
+                setSuppliers(sups as Supplier[]);
             } catch (error) {
                 console.error("Error al cargar datos del vivero", error);
             } finally {
@@ -90,7 +101,7 @@ export default function ViveroPage() {
                     <p className="text-[9px] text-slate-500 font-medium">{fechaActual}</p>
                 </div>
 
-                {/* 2. Solapas de navegación */}
+                {/* 2. Solapas de navegación (Sólo POS y Catálogo) */}
                 <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-md border border-slate-200">
                     <button
                         onClick={() => cambiarTab('pos')}
@@ -110,16 +121,6 @@ export default function ViveroPage() {
                             }`}
                     >
                         <span>📖</span> Catálogo ({resumenVivero.itemsRegistrados})
-                    </button>
-
-                    <button
-                        onClick={() => cambiarTab('clientes')}
-                        className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${tabActiva === 'clientes'
-                            ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                            }`}
-                    >
-                        <span>👥</span> Clientes
                     </button>
                 </div>
 
@@ -149,17 +150,20 @@ export default function ViveroPage() {
 
             </div>
 
-            {/* CONTENIDO EXPANDIDO AL 100% PARA FORZAR ALTURA HASTA EL FOOTER Y FIJAR PAGINACIÓN */}
+            {/* CONTENIDO EXPANDIDO */}
             <div className="w-full flex-1 flex flex-col min-h-[65vh]">
                 {tabActiva === 'pos' && <VentasPage />}
                 {tabActiva === 'catalogo' && (
                     loading ? (
                         <div className="text-center py-20 text-xs text-slate-500 font-semibold">Cargando catálogo general...</div>
                     ) : (
-                        <ModuloCatalogo productos={productos} />
+                        <ModuloCatalogo
+                            productos={productos}
+                            categories={categories}
+                            suppliers={suppliers}
+                        />
                     )
                 )}
-                {tabActiva === 'clientes' && <ModuloClientes />}
             </div>
 
         </div>
