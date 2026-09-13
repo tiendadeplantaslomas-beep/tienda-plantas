@@ -49,7 +49,6 @@ export default function DashboardPage() {
     const cargarDatosReales = async (role: string) => {
         setLoadingVentas(true);
         try {
-            // Ejecutamos ambas consultas en paralelo a la base de datos
             const [metricasOp, ventasRes] = await Promise.all([
                 getDashboardStats(),
                 getSalesEvolution(role)
@@ -176,6 +175,43 @@ export default function DashboardPage() {
                                         <p className="text-[9px] text-slate-500 line-clamp-1">Base de datos y perfiles.</p>
                                     </div>
                                     <span className="text-emerald-600 font-bold text-[10px] self-end opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                                </Link>
+
+                                {/* NUEVOS MÓDULOS DE MARKETING Y CMS */}
+                                <Link href="/portada" className="bg-white p-2 rounded-md border border-sky-500/60 shadow-xs hover:border-sky-600 transition-all flex flex-col justify-between group ring-1 ring-sky-500/10 min-h-[55px]">
+                                    <div className="space-y-0.5">
+                                        <span className="text-[8px] font-bold text-sky-700 uppercase">Tienda Web</span>
+                                        <h3 className="text-[11px] font-bold text-sky-900 leading-tight">Imágenes de Portada</h3>
+                                        <p className="text-[9px] text-slate-500 line-clamp-1">Banners y hero section.</p>
+                                    </div>
+                                    <span className="text-sky-600 font-bold text-[10px] self-end">→</span>
+                                </Link>
+
+                                <Link href="/promociones" className="bg-white p-2 rounded-md border border-amber-500/60 shadow-xs hover:border-amber-600 transition-all flex flex-col justify-between group ring-1 ring-amber-500/10 min-h-[55px]">
+                                    <div className="space-y-0.5">
+                                        <span className="text-[8px] font-bold text-amber-700 uppercase">Comercial</span>
+                                        <h3 className="text-[11px] font-bold text-amber-900 leading-tight">Promociones & Cupones</h3>
+                                        <p className="text-[9px] text-slate-500 line-clamp-1">Descuentos y ofertas.</p>
+                                    </div>
+                                    <span className="text-amber-600 font-bold text-[10px] self-end">→</span>
+                                </Link>
+
+                                <Link href="/campañas" className="bg-white p-2 rounded-md border border-purple-500/60 shadow-xs hover:border-purple-600 transition-all flex flex-col justify-between group ring-1 ring-purple-500/10 min-h-[55px]">
+                                    <div className="space-y-0.5">
+                                        <span className="text-[8px] font-bold text-purple-700 uppercase">Marketing</span>
+                                        <h3 className="text-[11px] font-bold text-purple-900 leading-tight">Campañas Especiales</h3>
+                                        <p className="text-[9px] text-slate-500 line-clamp-1">Eventos y temporadas.</p>
+                                    </div>
+                                    <span className="text-purple-600 font-bold text-[10px] self-end">→</span>
+                                </Link>
+
+                                <Link href="/usuarios" className="bg-white p-2 rounded-md border border-slate-400 shadow-xs hover:border-slate-600 transition-all flex flex-col justify-between group min-h-[55px]">
+                                    <div className="space-y-0.5">
+                                        <span className="text-[8px] font-bold text-slate-600 uppercase">Sistema</span>
+                                        <h3 className="text-[11px] font-bold text-slate-900 leading-tight">Usuarios ERP</h3>
+                                        <p className="text-[9px] text-slate-500 line-clamp-1">Permisos y roles internos.</p>
+                                    </div>
+                                    <span className="text-slate-700 font-bold text-[10px] self-end">→</span>
                                 </Link>
                             </>
                         )}

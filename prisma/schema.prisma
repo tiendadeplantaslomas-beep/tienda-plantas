@@ -67,6 +67,7 @@ model Product {
   supplierId  String?
   supplier    Supplier?      @relation(fields: [supplierId], references: [id])
 
+  promotions  Promotion[]    @relation("PromotionProducts")
   cost        Int            
   otherCosts  Int            @default(0) 
   price       Int            
@@ -139,26 +140,26 @@ model PurchaseItem {
   finalUnitCost      Int      
 }
 
-
 // -------------------------------------------------------------
 // CLIENTES
 // -------------------------------------------------------------
 model Customer {
-  id                 String    @id @default(cuid())
+  id                 String              @id @default(cuid())
   name               String
-  email              String    @unique
+  email              String              @unique
   password_hash      String
   phone              String
   address            String
   dni_cuit           String
-  gender             String?   @default("neutral") // Agregamos esto
-  image_url          String?   // Agregamos esto para la foto
-  email_verified     Int       @default(0)
+  gender             String?             @default("neutral")
+  image_url          String?
+  email_verified     Int                 @default(0)
   verification_token String?
-  origin             String    @default("tienda")
-  created_at         DateTime  @default(now())
+  origin             String              @default("tienda")
+  created_at         DateTime            @default(now())
   sales              Sale[]
   payments           Payment[]
+  customerPromotions CustomerPromotion[]
 }
 
 // -------------------------------------------------------------
@@ -207,7 +208,7 @@ model CompanySettings {
 }
 
 // -------------------------------------------------------------
-// VENTAS / PEDIDOS (Limpio)
+// VENTAS / PEDIDOS
 // -------------------------------------------------------------
 model Sale {
   id               String        @id @default(cuid())
@@ -219,7 +220,6 @@ model Sale {
   paymentStatus    String        @default("PENDIENTE") 
   status           String        @default("REGISTRADO") 
   
-  // Volvemos a declarar las columnas que el frontend necesita
   paymentMethod    PaymentMethod @default(EFECTIVO) 
   paymentReference String?       
 
@@ -258,7 +258,7 @@ model SaleItem {
 }
 
 // -------------------------------------------------------------
-// PAGOS (El único lugar con método de pago)
+// PAGOS
 // -------------------------------------------------------------
 model Payment {
   id            String        @id @default(cuid())
@@ -268,8 +268,94 @@ model Payment {
   customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
   
   amount        Int           
-  paymentMethod PaymentMethod @default(EFECTIVO) // <--- Debe coincidir aquí también
+  paymentMethod PaymentMethod @default(EFECTIVO) 
   reference     String?       
   notes         String?
   createdAt     DateTime      @default(now())
+}
+
+// -------------------------------------------------------------
+// PROMOCIONES Y CUPONERA
+// -------------------------------------------------------------
+model Promotion {
+  id                 Int                 @id @default(autoincrement())
+  titulo             String
+  descripcion        String?
+  badge              String?
+  linkWhatsapp       String?
+  imagenUrl          String?             @db.LongText
+  activa             Boolean             @default(true)
+  stock              Int                 
+  desde              String?
+  hasta              String?
+  customerPromotions CustomerPromotion[]
+  productos          Product[]           @relation("PromotionProducts")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model CustomerPromotion {
+  id           Int       @id @default(autoincrement())
+  customerId   String
+  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  promotionId  Int
+  promotion    Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  status       String    @default("activa")
+  createdAt    DateTime  @default(now())
+  redeemedAt   DateTime?
+}
+
+// -------------------------------------------------------------
+// BANNERS Y CAMPAÑAS
+// -------------------------------------------------------------
+model Banner {
+  id        Int      @id @default(autoincrement())
+  titulo    String
+  subtitulo String?
+  imagenUrl String
+  link      String?
+  badge     String?
+  orden     Int      @default(0)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Campaign {
+  id          Int      @id @default(autoincrement())
+  titulo      String
+  descripcion String?
+  imagenUrl   String?
+  etiqueta    String?
+  tipo        String   @default("verde")
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// -------------------------------------------------------------
+// USUARIOS DEL SISTEMA Y RESEÑAS
+// -------------------------------------------------------------
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  email     String   @unique
+  password  String
+  rol       String   @default("CAJERO") 
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Resena {
+  id           Int      @id @default(autoincrement())
+  nombre       String?
+  comentario   String?  @db.Text
+  image_url    String?  @db.LongText  
+  calificacion Int?
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("resenas") 
 }

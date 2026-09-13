@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Camera, Key, User, Package, CreditCard, ShieldCheck, Mail, Phone, MapPin, Eye, EyeOff } from 'lucide-react';
+import { Camera, Key, User, Package, CreditCard, ShieldCheck, Mail, Phone, MapPin, Eye, EyeOff, Tag } from 'lucide-react';
+import CustomerCouponsSection from '@/components/CustomerCouponsSection';
 
 // Función auxiliar para desglosar la dirección vieja de la DB en campos individuales
 const parseInitialAddress = (addr = '') => {
@@ -43,7 +44,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
     const safeCustomer = initialCustomer || {};
 
     const [customer, setCustomer] = useState<any>(safeCustomer);
-    const [activeTab, setActiveTab] = useState<'profile' | 'payment' | 'avatar' | 'security' | 'orders'>('profile');
+    const [activeTab, setActiveTab] = useState<'profile' | 'payment' | 'avatar' | 'security' | 'orders' | 'coupons'>('profile');
 
     const [selectedGender, setSelectedGender] = useState(safeCustomer.gender || 'neutral');
     const [customImage, setCustomImage] = useState<string | null>(safeCustomer.image_url || null);
@@ -316,6 +317,12 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                 className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'orders' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
                             >
                                 <Package className="h-4 w-4" /> Compras
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('coupons')}
+                                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'coupons' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
+                            >
+                                <Tag className="h-4 w-4" /> Cuponera
                             </button>
                         </div>
 
@@ -594,7 +601,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                 </form>
                             )}
 
-                            {/* Solapa 5: Historial de Compras (Actualizado) */}
+                            {/* Solapa 5: Historial de Compras */}
                             {activeTab === 'orders' && (
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
@@ -655,6 +662,11 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                         </div>
                                     )}
                                 </div>
+                            )}
+
+                            {/* Solapa 6: Cuponera de Beneficios */}
+                            {activeTab === 'coupons' && (
+                                <CustomerCouponsSection customerId={customer.id} />
                             )}
 
                         </div>

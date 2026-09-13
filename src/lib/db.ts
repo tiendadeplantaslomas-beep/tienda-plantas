@@ -351,6 +351,238 @@ export const prisma: any = {
             }
         }
     },
+
+    // ==========================================
+    // MÓDULOS DE PROMOCIONES, BANNERS, CAMPAÑAS Y USUARIOS
+    // ==========================================
+    promotion: {
+        findMany: async (args?: any) => {
+            const connection = await pool.getConnection();
+            try {
+                let sql = 'SELECT * FROM `Promotion`';
+                const params: any[] = [];
+                if (args?.where?.activa !== undefined) {
+                    sql += ' WHERE activa = ?';
+                    params.push(args.where.activa ? 1 : 0);
+                }
+                if (args?.orderBy?.id === 'desc' || args?.orderBy?.id === 'DESC') {
+                    sql += ' ORDER BY id DESC';
+                }
+                const [rows]: any = await connection.execute(sql, params);
+                return rows.map((r: any) => ({
+                    ...r,
+                    activa: Boolean(r.activa)
+                }));
+            } catch (err) {
+                console.error("Error al listar promotions:", err);
+                return [];
+            } finally {
+                connection.release();
+            }
+        },
+        create: async ({ data }: { data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                const [result]: any = await connection.execute(
+                    'INSERT INTO `Promotion` (titulo, descripcion, badge, linkWhatsapp, activa, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
+                    [data.titulo, data.descripcion || '', data.badge || '', data.linkWhatsapp || '', data.activa ?? true ? 1 : 0]
+                );
+                return { id: result.insertId, ...data };
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        },
+        update: async ({ where, data }: { where: { id: number }; data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                const fields: string[] = [];
+                const values: any[] = [];
+
+                if (data.activa !== undefined) { fields.push('activa = ?'); values.push(data.activa ? 1 : 0); }
+                if (data.titulo !== undefined) { fields.push('titulo = ?'); values.push(data.titulo); }
+                if (data.descripcion !== undefined) { fields.push('descripcion = ?'); values.push(data.descripcion); }
+                if (data.badge !== undefined) { fields.push('badge = ?'); values.push(data.badge); }
+                if (data.linkWhatsapp !== undefined) { fields.push('linkWhatsapp = ?'); values.push(data.linkWhatsapp); }
+
+                fields.push('updatedAt = NOW()');
+
+                if (fields.length > 0) {
+                    values.push(where.id);
+                    await connection.execute(`UPDATE \`Promotion\` SET ${fields.join(', ')} WHERE id = ?`, values);
+                }
+
+                const [rows]: any = await connection.execute('SELECT * FROM `Promotion` WHERE id = ? LIMIT 1', [where.id]);
+                return rows[0] ? { ...rows[0], activa: Boolean(rows[0].activa) } : null;
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        }
+    },
+    banner: {
+        findMany: async (args?: any) => {
+            const connection = await pool.getConnection();
+            try {
+                let sql = 'SELECT * FROM `Banner`';
+                const params: any[] = [];
+                if (args?.where?.activo !== undefined) {
+                    sql += ' WHERE activo = ?';
+                    params.push(args.where.activo ? 1 : 0);
+                }
+                if (args?.orderBy?.orden === 'asc' || args?.orderBy?.orden === 'ASC') {
+                    sql += ' ORDER BY orden ASC';
+                }
+                const [rows]: any = await connection.execute(sql, params);
+                return rows.map((r: any) => ({
+                    ...r,
+                    activo: Boolean(r.activo)
+                }));
+            } catch (err) {
+                console.error("Error al listar banners:", err);
+                return [];
+            } finally {
+                connection.release();
+            }
+        },
+        create: async ({ data }: { data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                const [result]: any = await connection.execute(
+                    'INSERT INTO `Banner` (titulo, subtitulo, imagenUrl, link, badge, orden, activo, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+                    [data.titulo, data.subtitulo || '', data.imagenUrl, data.link || '', data.badge || '', data.orden ?? 0, data.activo ?? true ? 1 : 0]
+                );
+                return { id: result.insertId, ...data };
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        },
+        update: async ({ where, data }: { where: { id: number }; data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                if (data.activo !== undefined) {
+                    await connection.execute('UPDATE `Banner` SET activo = ?, updatedAt = NOW() WHERE id = ?', [data.activo ? 1 : 0, where.id]);
+                }
+                const [rows]: any = await connection.execute('SELECT * FROM `Banner` WHERE id = ? LIMIT 1', [where.id]);
+                return rows[0] || null;
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        }
+    },
+    campaign: {
+        findMany: async (args?: any) => {
+            const connection = await pool.getConnection();
+            try {
+                let sql = 'SELECT * FROM `Campaign`';
+                const params: any[] = [];
+                if (args?.where?.activo !== undefined) {
+                    sql += ' WHERE activo = ?';
+                    params.push(args.where.activo ? 1 : 0);
+                }
+                if (args?.orderBy?.id === 'desc' || args?.orderBy?.id === 'DESC') {
+                    sql += ' ORDER BY id DESC';
+                }
+                const [rows]: any = await connection.execute(sql, params);
+                return rows.map((r: any) => ({
+                    ...r,
+                    activo: Boolean(r.activo)
+                }));
+            } catch (err) {
+                console.error("Error al listar campaigns:", err);
+                return [];
+            } finally {
+                connection.release();
+            }
+        },
+        create: async ({ data }: { data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                const [result]: any = await connection.execute(
+                    'INSERT INTO `Campaign` (titulo, descripcion, imagenUrl, etiqueta, tipo, activo, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())',
+                    [data.titulo, data.descripcion || '', data.imagenUrl || '', data.etiqueta || '', data.tipo || 'verde', data.activo ?? true ? 1 : 0]
+                );
+                return { id: result.insertId, ...data };
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        },
+        update: async ({ where, data }: { where: { id: number }; data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                if (data.activo !== undefined) {
+                    await connection.execute('UPDATE `Campaign` SET activo = ?, updatedAt = NOW() WHERE id = ?', [data.activo ? 1 : 0, where.id]);
+                }
+                const [rows]: any = await connection.execute('SELECT * FROM `Campaign` WHERE id = ? LIMIT 1', [where.id]);
+                return rows[0] || null;
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        }
+    },
+    usuario: {
+        findMany: async (args?: any) => {
+            const connection = await pool.getConnection();
+            try {
+                let sql = 'SELECT * FROM `Usuario`';
+                const params: any[] = [];
+                if (args?.where?.activo !== undefined) {
+                    sql += ' WHERE activo = ?';
+                    params.push(args.where.activo ? 1 : 0);
+                }
+                const [rows]: any = await connection.execute(sql, params);
+                return rows.map((r: any) => ({
+                    ...r,
+                    activo: Boolean(r.activo)
+                }));
+            } catch (err) {
+                console.error("Error al listar usuarios:", err);
+                return [];
+            } finally {
+                connection.release();
+            }
+        },
+        create: async ({ data }: { data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                const [result]: any = await connection.execute(
+                    'INSERT INTO `Usuario` (nombre, email, password, rol, activo, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
+                    [data.nombre, data.email, data.password, data.rol || 'CAJERO', data.activo ?? true ? 1 : 0]
+                );
+                return { id: result.insertId, ...data };
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        },
+        update: async ({ where, data }: { where: { id: number }; data: any }) => {
+            const connection = await pool.getConnection();
+            try {
+                if (data.activo !== undefined) {
+                    await connection.execute('UPDATE `Usuario` SET activo = ?, updatedAt = NOW() WHERE id = ?', [data.activo ? 1 : 0, where.id]);
+                }
+                const [rows]: any = await connection.execute('SELECT * FROM `Usuario` WHERE id = ? LIMIT 1', [where.id]);
+                return rows[0] || null;
+            } catch (err) {
+                throw err;
+            } finally {
+                connection.release();
+            }
+        }
+    },
+    // ==========================================
+
     $transaction: async (callback: (tx: any) => Promise<any>) => {
         const connection = await pool.getConnection();
         await connection.beginTransaction();
