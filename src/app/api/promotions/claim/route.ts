@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/db'; // 👈 Instancia compartida del proyecto
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +16,7 @@ export async function POST(request: Request) {
         }
 
         // 1. REGLA DE NEGOCIO: Verificar si el cliente ya tiene una promoción ACTIVA en su cuponera
-        const existingActivePromo = await prisma.userPromotion.findFirst({
+        const existingActivePromo = await prisma.customerPromotion.findFirst({ // 👈 Nombre corregido a customerPromotion
             where: {
                 customerId: String(customerId),
                 status: 'activa',
@@ -55,7 +53,7 @@ export async function POST(request: Request) {
         // 3. TRANSACCIÓN SEGURA: Guardar en el perfil del usuario y descontar stock simultáneamente
         const result = await prisma.$transaction(async (tx) => {
             // Guardar en la cuponera del usuario
-            const userPromo = await tx.userPromotion.create({
+            const userPromo = await tx.customerPromotion.create({ // 👈 Nombre corregido a customerPromotion
                 data: {
                     customerId: String(customerId),
                     promotionId: promotion.id,

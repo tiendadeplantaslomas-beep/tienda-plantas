@@ -1,46 +1,89 @@
 import { NextResponse } from 'next/server';
-// Importa aquí tu cliente de base de datos (por ejemplo, Prisma: import { prisma } from '@/lib/prisma';)
+import { prisma } from '@/lib/prisma';
 
+// GET: Obtener todas las reseñas activas
 export async function GET() {
     try {
-        // EJEMPLO CON PRISMA O BASE DE DATOS:
-        // const resenas = await prisma.resena.findMany({ orderBy: { fecha: 'desc' } });
-        // return NextResponse.json(resenas);
+        const resenasDB = await prisma.resena.findMany({
+            where: { activo: true },
+            orderBy: { createdAt: 'desc' }
+        });
 
-        // Respuesta vacía o mock inicial mientras configuras tu ORM/Base de datos
-        return NextResponse.json([]);
+        const resenasFormateadas = resenasDB.map((r) => ({
+            id: r.id,
+            nombre: r.nombre || 'Anónimo',
+            comentario: r.comentario || '',
+            estrellas: r.calificacion || 5,
+            respuesta: r.respuesta || null, // 👈 Devolvemos la respuesta si existe
+            fecha: new Date(r.createdAt).toLocaleDateString()
+        }));
+
+        return NextResponse.json(resenasFormateadas, { status: 200 });
     } catch (error) {
+        console.error('Error al obtener reseñas:', error);
         return NextResponse.json({ error: 'Error al obtener reseñas' }, { status: 500 });
     }
 }
 
+// POST: Crear una reseña (Solo para usuarios registrados)
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { nombre, comentario, estrellas } = body;
+        const { nombre, comentario, estrellas, customerId } = body;
 
-        // Validación básica
-        if (!nombre || !comentario) {
-            return NextResponse.json({ error: 'Faltan datos obligatorios' }, { status: 400 });
+        // Validamos que el usuario esté registrado/logueado
+        if (!customerId || !nombre || !comentario) {
+            return NextResponse.json(
+                { error: 'Debes iniciar sesión para dejar una reseña y completar los campos obligatorios.' },
+                { status: 400 }
+            );
         }
 
-        // EJEMPLO DE GUARDADO EN BASE DE DATOS:
-        // const nuevaResena = await prisma.resena.create({
-        //     data: { nombre, comentario, estrellas: Number(estrellas), fecha: new Date().toLocaleDateString() }
-        // });
-        // return NextResponse.json(nuevaResena);
+        const nuevaResena = await prisma.resena.create({
+            data: {
+                nombre,
+                comentario,
+                calificacion: Number(estrellas) || 5,
+                activo: true
+            }
+        });
 
-        // Mock de respuesta exitosa para pruebas inmediatas:
-        const nuevaResenaMock = {
-            id: Date.now(),
-            nombre,
-            comentario,
-            estrellas: Number(estrellas),
+        return NextResponse.json({
+            id: nuevaResena.id,
+            nombre: nuevaResena.nombre,
+            comentario: nuevaResena.comentario,
+            estrellas: nuevaResena.calificacion,
+            respuesta: null,
             fecha: 'Recién publicado'
-        };
-
-        return NextResponse.json(nuevaResenaMock, { status: 201 });
+        }, { status: 201 });
     } catch (error) {
+        console.error('Error al guardar la reseña:', error);
         return NextResponse.json({ error: 'Error al guardar la reseña' }, { status: 500 });
+    }
+}
+
+// PATCH: Permitir a la tienda responder una reseña
+export async function PATCH(request: Request) {
+    try {
+        const body = await request.json();
+        const { id, respuesta } = body;
+
+        if (!id) {
+            return NextResponse.json({ error: 'Falta el ID de la reseña.' }, { status: 400 });
+        }
+
+        const resenaActualizada = await prisma.resena.update({
+            where: { id: Number(id) },
+            data: { respuesta }
+        });
+
+        return NextResponse.json({
+            success: true,
+            message: 'Respuesta guardada con éxito',
+            resena: resenaActualizada
+        });
+    } catch (error) {
+        console.error('Error al responder reseña:', error);
+        return NextResponse.json({ error: 'Error al actualizar la respuesta' }, { status: 500 });
     }
 }

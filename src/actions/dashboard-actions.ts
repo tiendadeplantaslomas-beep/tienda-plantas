@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 
-// Métricas operativas (del paso anterior)
+// Métricas operativas (actualizado con reseñas pendientes)
 export async function getDashboardStats() {
     try {
         const productos = await prisma.product.findMany({
@@ -10,15 +10,33 @@ export async function getDashboardStats() {
         });
         const stockBajoCount = productos.filter(p => (p.stock || 0) <= (p.minStock || 2)).length;
 
+        // Consultamos las reseñas que aún no tienen respuesta en la base de datos
+        // (Asumiendo que tu modelo en Prisma se llama 'resena' y tiene campos como 'respuesta')
+        const resenasPendientesCount = await prisma.resena.count({
+            where: {
+                OR: [
+                    { respuesta: null },
+                    { respuesta: '' }
+                ]
+            }
+        }).catch(() => 0); // Por seguridad si la tabla tuviera otro nombre exacto
+
         return {
             stockBajo: stockBajoCount,
             facturasPendientes: 1,
             pedidosCamino: 5,
-            remitosValidar: 2
+            remitosValidar: 2,
+            resenasPendientes: resenasPendientesCount // <--- ¡Acá se conecta con el frontend!
         };
     } catch (error) {
         console.error("Error al obtener estadísticas operativas:", error);
-        return { stockBajo: 0, facturasPendientes: 0, pedidosCamino: 0, remitosValidar: 0 };
+        return {
+            stockBajo: 0,
+            facturasPendientes: 0,
+            pedidosCamino: 0,
+            remitosValidar: 0,
+            resenasPendientes: 0
+        };
     }
 }
 

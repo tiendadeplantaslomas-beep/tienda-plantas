@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET: Obtener todos los productos con sus relaciones
-export async function GET() {
+// GET: Obtener todos los productos (incluyendo el campo destacado y relaciones)
+export async function GET(request: Request) {
     try {
+        const { searchParams } = new URL(request.url);
+        const soloDestacados = searchParams.get('destacado');
+
         const products = await prisma.product.findMany({
+            where: soloDestacados === 'true' ? { destacado: true } : undefined,
             include: {
-                category: true, // Importante para traer el nombre de la categoría
-                supplier: true, // Importante para traer el proveedor si existe
+                category: true,
+                supplier: true,
             },
             orderBy: { updatedAt: "desc" },
         });
@@ -33,7 +37,8 @@ export async function POST(req: Request) {
             supplierId,
             imageUrl,
             margin,
-            taxRate
+            taxRate,
+            destacado
         } = body;
 
         const newProduct = await prisma.product.create({
@@ -41,14 +46,15 @@ export async function POST(req: Request) {
                 code,
                 name,
                 description,
-                price: parseInt(price, 10), // En tu esquema es Int
-                cost: parseInt(cost, 10),   // En tu esquema es Int
+                price: parseInt(price, 10),
+                cost: parseInt(cost, 10),
                 stock: parseInt(stock, 10) || 0,
-                categoryId,                  // Debe ser el ID de la categoría
+                categoryId,
                 supplierId: supplierId || null,
                 imageUrl,
                 margin: margin ? parseFloat(margin) : 100,
                 taxRate: taxRate ? parseFloat(taxRate) : 21,
+                destacado: Boolean(destacado), // Guardamos si es destacado
             },
         });
 

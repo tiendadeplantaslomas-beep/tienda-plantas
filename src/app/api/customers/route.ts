@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { Prisma } from '@prisma/client';
-import { createCustomerService } from '@/lib/customerService'; // 👈 Apunta correctamente a lib
+import { PrismaClient, Prisma } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+
+const prisma = new PrismaClient();
 
 // GET: Obtener todos los clientes
 export async function GET() {
     try {
         const customers = await prisma.customer.findMany({
-            orderBy: { createdAt: 'desc' }
+            orderBy: { created_at: 'desc' }
         });
         return NextResponse.json(customers);
     } catch (error) {
@@ -19,21 +20,48 @@ export async function GET() {
     }
 }
 
-// POST: Crear nuevo cliente utilizando el servicio centralizado
+// POST: Crear nuevo cliente
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const newCustomer = await createCustomerService(body);
+        const { name, email, phone, address, dni_cuit, password } = body;
+
+        if (!name || !email) {
+            return NextResponse.json({ error: 'El nombre y el email son obligatorios.' }, { status: 400 });
+        }
+
+        const existing = await prisma.customer.findUnique({ where: { email } });
+        if (existing) {
+            return NextResponse.json(
+                { error: 'Ya existe un cliente con ese correo electrónico.' },
+                { status: 409 }
+            );
+        }
+
+        const password_hash = await bcrypt.hash(password || '123456', 10);
+
+        const newCustomer = await prisma.customer.create({
+            data: {
+                name,
+                email,
+                password_hash,
+                phone: phone || '',
+                address: address || '',
+                dni_cuit: dni_cuit || '',
+                origin: 'admin',
+                email_verified: 1
+            }
+        });
+
         return NextResponse.json(newCustomer, { status: 201 });
 
     } catch (error: any) {
         console.error('ERROR EN API CUSTOMERS:', error);
 
-        // Captura de errores de Prisma (ej: campos únicos duplicados)
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
             if (error.code === 'P2002') {
                 return NextResponse.json(
-                    { error: 'Ya existe un cliente con ese dato (e-mail o teléfono).' },
+                    { error: 'Ya existe un cliente con ese dato (e-mail).' },
                     { status: 409 }
                 );
             }

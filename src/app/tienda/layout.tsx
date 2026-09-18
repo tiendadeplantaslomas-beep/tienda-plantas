@@ -5,13 +5,16 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { User, LogOut, Store, ArrowLeft, ShoppingBag } from 'lucide-react';
+import { CartProvider, useCart } from '@/context/CartContext';
+import CartDrawer from '@/components/CartDrawer';
 
-export default function TiendaLayout({ children }: { children: React.ReactNode }) {
+function TiendaLayoutContent({ children }: { children: React.ReactNode }) {
     const [fechaActual, setFechaActual] = useState('');
     const [customer, setCustomer] = useState<any>(null);
-    const [cartCount, setCartCount] = useState(0);
     const pathname = usePathname();
     const router = useRouter();
+
+    const { totalItems, toggleCart } = useCart();
 
     const esPerfil = pathname === '/tienda/perfil';
     const esCarrito = pathname === '/tienda/carrito';
@@ -33,34 +36,6 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
         if (data) {
             try { setCustomer(JSON.parse(data)); } catch (e) { console.error(e); }
         }
-
-        // Función para calcular la cantidad de ítems en el carrito
-        const actualizarContadorCarrito = () => {
-            const cartData = localStorage.getItem('cart');
-            if (cartData) {
-                try {
-                    const items = JSON.parse(cartData);
-                    // Sumar las cantidades de cada producto
-                    const totalItems = items.reduce((acc: number, item: any) => acc + (item.quantity || 1), 0);
-                    setCartCount(totalItems);
-                } catch (e) {
-                    setCartCount(0);
-                }
-            } else {
-                setCartCount(0);
-            }
-        };
-
-        actualizarContadorCarrito();
-
-        // Escuchar cambios en el carrito si se actualiza desde otra pestaña o componente
-        window.addEventListener('storage', actualizarContadorCarrito);
-        window.addEventListener('cartUpdated', actualizarContadorCarrito);
-
-        return () => {
-            window.removeEventListener('storage', actualizarContadorCarrito);
-            window.removeEventListener('cartUpdated', actualizarContadorCarrito);
-        };
     }, [pathname]);
 
     const handleLogout = () => {
@@ -122,21 +97,19 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
                                 </Link>
                             )}
 
-                            {/* Botón Carrito con Contador Badge */}
-                            {!esCarrito && (
-                                <Link
-                                    href="/tienda/carrito"
-                                    className="relative px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold rounded shadow-2xs flex items-center gap-1 transition-all"
-                                >
-                                    <ShoppingBag className="w-3.5 h-3.5 text-emerald-700" />
-                                    <span>Carrito</span>
-                                    {cartCount > 0 && (
-                                        <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
-                                            {cartCount}
-                                        </span>
-                                    )}
-                                </Link>
-                            )}
+                            {/* Botón Carrito con Contador Badge (Abre el panel lateral) */}
+                            <button
+                                onClick={toggleCart}
+                                className="relative px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold rounded shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
+                            >
+                                <ShoppingBag className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Carrito</span>
+                                {totalItems > 0 && (
+                                    <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
+                                        {totalItems}
+                                    </span>
+                                )}
+                            </button>
 
                             {/* Botón Mi Perfil o Ingresar */}
                             {customer ? (
@@ -189,6 +162,17 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
                     </div>
                 </footer>
             </div>
+
+            {/* Panel lateral global del carrito */}
+            <CartDrawer />
         </div>
+    );
+}
+
+export default function TiendaLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <CartProvider>
+            <TiendaLayoutContent>{children}</TiendaLayoutContent>
+        </CartProvider>
     );
 }

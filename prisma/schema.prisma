@@ -77,10 +77,10 @@ model Product {
   trackStock  Boolean        @default(true)
   stock       Int            @default(0)
   minStock    Int            @default(2) 
-
+  destacado   Boolean        @default(false) // <-- CAMPO NUEVO AÑADIDO
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @default(now()) @updatedAt
-
+  
   saleItems     SaleItem[]
   purchaseItems PurchaseItem[] 
   movements     StockMovement[]
@@ -288,6 +288,7 @@ model Promotion {
   stock              Int                 
   desde              String?
   hasta              String?
+  categoria          String?             // <--- ¡Faltaba agregar esta línea!
   customerPromotions CustomerPromotion[]
   productos          Product[]           @relation("PromotionProducts")
   createdAt          DateTime            @default(now())
@@ -354,6 +355,7 @@ model Resena {
   image_url    String?  @db.LongText  
   calificacion Int?
   activo       Boolean  @default(true)
+  respuesta    String?  @db.Text // 👈 Nuevo campo para la respuesta oficial de la tienda
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

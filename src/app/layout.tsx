@@ -1,5 +1,6 @@
 // app/layout.tsx
 import React from 'react';
+import { CartProvider } from '@/context/CartContext';
 import './globals.css'; // o las clases de CSS que uses
 
 export const metadata = {
@@ -15,7 +16,9 @@ export default function RootLayout({
     return (
         <html lang="es">
             <body className="antialiased bg-slate-50 text-slate-800">
-                {children}
+                <CartProvider>
+                    {children}
+                </CartProvider>
             </body>
         </html>
     );

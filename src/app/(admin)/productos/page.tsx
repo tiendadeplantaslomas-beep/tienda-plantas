@@ -213,6 +213,9 @@ export default function ProductosPage() {
     const [imageUrl, setImageUrl] = useState('');
     const [imageError, setImageError] = useState<string | null>(null);
 
+    // NUEVO ESTADO: destacado
+    const [destacado, setDestacado] = useState(false);
+
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const [sortField, setSortField] = useState<SortField>('name');
@@ -297,6 +300,7 @@ export default function ProductosPage() {
         setMinStock(2);
         setImageUrl('');
         setImageError(null);
+        setDestacado(false); // RESET DE DESTACADO
     };
 
     const loadData = async () => {
@@ -306,7 +310,6 @@ export default function ProductosPage() {
             setCategories(cats as Category[]);
             setSuppliers(sups as Supplier[]);
 
-            // Manejo robusto adaptado a Prisma / Server Actions
             if (Array.isArray(prods)) {
                 setProducts(prods as Product[]);
             } else if (prods && typeof prods === 'object' && 'products' in prods) {
@@ -420,6 +423,7 @@ export default function ProductosPage() {
         setMinStock(prod.minStock);
         setImageUrl(prod.imageUrl || '');
         setImageError(null);
+        setDestacado(prod.destacado || false); // CARGA DE DESTACADO
 
         setShowProductForm(true);
         setTimeout(() => {
@@ -495,7 +499,7 @@ export default function ProductosPage() {
             return;
         }
 
-        const headers = ['Codigo', 'Nombre', 'Categoria', 'Proveedor', 'CostoBase', 'FleteOtros', 'Margen', 'IVA', 'PrecioFinal', 'Stock', 'StockMinimo', 'ImagenUrl'];
+        const headers = ['Codigo', 'Nombre', 'Categoria', 'Proveedor', 'CostoBase', 'FleteOtros', 'Margen', 'IVA', 'PrecioFinal', 'Stock', 'StockMinimo', 'Destacado', 'ImagenUrl'];
         const rows = products.map(p => [
             `"${p.code || ''}"`,
             `"${p.name || ''}"`,
@@ -508,6 +512,7 @@ export default function ProductosPage() {
             p.price || 0,
             p.stock || 0,
             p.minStock || 0,
+            p.destacado ? 'SI' : 'NO',
             `"${p.imageUrl || ''}"`
         ]);
 
@@ -745,6 +750,7 @@ export default function ProductosPage() {
                 )}
 
                 {/* PANELES INDEPENDIENTES */}
+                {/* ... (Paneles standalones permanecen igual) */}
                 {showCategoryPanel && (
                     <div className="bg-slate-900 text-white p-3 rounded-md shadow-md border border-slate-700 animate-in fade-in space-y-2 shrink-0">
                         <div className="flex justify-between items-center border-b border-slate-700 pb-1.5">
@@ -868,6 +874,7 @@ export default function ProductosPage() {
                                 taxRate: Number(taxRate) || 0,
                                 stock: Number(stock) || 0,
                                 minStock: Number(minStock) || 0,
+                                destacado: Boolean(destacado), // SE ENVÍA DESTACADO
                                 imageUrl: imageUrl.trim() || '/sinfoto.png'
                             });
 
@@ -909,9 +916,6 @@ export default function ProductosPage() {
                                             <span>⚠️</span> {imageError}
                                         </p>
                                     )}
-                                    <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                                        Tamaño máximo permitido: <strong className="text-stone-700 dark:text-stone-300">2 MB</strong>. Formatos: <span className="font-medium">JPG, PNG o WebP</span>. Seleccioná una foto de tus especies. Si no elegís ninguna, se asignará <code>sinfoto</code> por defecto.
-                                    </p>
                                 </div>
                             </div>
 
@@ -1017,7 +1021,6 @@ export default function ProductosPage() {
                                             + Inline
                                         </button>
                                     </div>
-
                                     {showInlineSup && (
                                         <SupplierInlineForm
                                             initialName={supplierSearch}
@@ -1030,7 +1033,6 @@ export default function ProductosPage() {
                                             }}
                                         />
                                     )}
-
                                     <input
                                         type="text"
                                         placeholder="Buscar o seleccionar proveedor..."
@@ -1043,7 +1045,6 @@ export default function ProductosPage() {
                                         onFocus={() => setShowSupDropdown(true)}
                                         className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold uppercase text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                                     />
-
                                     {showSupDropdown && (
                                         <div className="absolute z-40 top-full left-0 right-0 bg-white border border-slate-200 shadow-md rounded-b max-h-40 overflow-y-auto mt-0.5">
                                             {filteredSups.length > 0 ? (
@@ -1139,7 +1140,7 @@ export default function ProductosPage() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-emerald-50/50 p-2.5 rounded border border-emerald-100">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 bg-emerald-50/50 p-2.5 rounded border border-emerald-100 items-center">
                                 <div className="flex flex-col justify-center">
                                     <label className="block text-[8px] font-bold text-emerald-900 uppercase">Precio Final (Con IVA)</label>
                                     <div className="text-sm font-black text-emerald-700">
@@ -1159,7 +1160,7 @@ export default function ProductosPage() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Stock Mínimo (Alerta)</label>
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Stock Mínimo</label>
                                     <input
                                         type="number"
                                         placeholder="2"
@@ -1167,6 +1168,20 @@ export default function ProductosPage() {
                                         onChange={(e) => setMinStock(e.target.value === '' ? '' : parseInt(e.target.value))}
                                         className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                                     />
+                                </div>
+
+                                {/* NUEVO CHECKBOX DE DESTACADO */}
+                                <div className="flex items-center gap-2 pt-2 md:pt-4">
+                                    <input
+                                        type="checkbox"
+                                        id="destacadoCheck"
+                                        checked={destacado}
+                                        onChange={(e) => setDestacado(e.target.checked)}
+                                        className="w-4 h-4 text-emerald-600 rounded border-emerald-300 focus:ring-emerald-500 cursor-pointer"
+                                    />
+                                    <label htmlFor="destacadoCheck" className="text-[9px] font-bold text-slate-700 uppercase cursor-pointer select-none">
+                                        ⭐ Destacar en Inicio
+                                    </label>
                                 </div>
                             </div>
 
@@ -1191,6 +1206,7 @@ export default function ProductosPage() {
                 )}
 
                 {/* MODAL AJUSTE RÁPIDO DE STOCK */}
+                {/* ... (Se mantiene intacto) ... */}
                 {showStockModal && selectedProductForStock && (
                     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3">
                         <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 space-y-3 animate-in zoom-in-95">
@@ -1286,6 +1302,7 @@ export default function ProductosPage() {
                 )}
 
                 {/* MODAL DE IMPORTACIÓN */}
+                {/* ... (Se mantiene intacto) ... */}
                 {showImportModal && (
                     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3">
                         <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 space-y-3 animate-in zoom-in-95">
@@ -1300,7 +1317,7 @@ export default function ProductosPage() {
                                 <p>Seleccioná un archivo en formato <strong>CSV</strong> o <strong>JSON</strong> con el catálogo.</p>
                                 <div className="p-2 bg-slate-50 rounded border border-slate-200 text-[9px] font-mono leading-tight">
                                     Encabezados CSV:<br />
-                                    <code>Codigo, Nombre, Categoria, Proveedor, CostoBase, FleteOtros, Margen, IVA, PrecioFinal, Stock, StockMinimo, ImagenUrl</code>
+                                    <code>Codigo, Nombre, Categoria, Proveedor, CostoBase, FleteOtros, Margen, IVA, PrecioFinal, Stock, StockMinimo, Destacado, ImagenUrl</code>
                                 </div>
                             </div>
 
@@ -1334,10 +1351,9 @@ export default function ProductosPage() {
                     </div>
                 )}
 
-                {/* TABLA PRINCIPAL Y PESTAÑAS (CORREGIDO CON SPACE-Y-4 Y OVERFLOW-X-AUTO LIMPIO) */}
+                {/* TABLA PRINCIPAL Y PESTAÑAS */}
                 <div className="bg-stone-50 dark:bg-stone-900 p-4 md:p-6 rounded-xl shadow-md border border-stone-200 dark:border-stone-800 space-y-4">
                     <div className="p-2 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2">
-
                         <div className="flex items-center gap-1 bg-slate-200/60 p-0.5 rounded">
                             <button
                                 type="button"
@@ -1354,7 +1370,6 @@ export default function ProductosPage() {
                                 ⚠️ Bajo Stock ({products.filter(p => p.stock <= p.minStock).length})
                             </button>
                         </div>
-
                         <div className="flex items-center gap-1.5">
                             <div className="relative flex-1 sm:w-56">
                                 <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-slate-400 text-[10px]">🔍</span>
@@ -1375,7 +1390,6 @@ export default function ProductosPage() {
                                     </button>
                                 )}
                             </div>
-
                             <select
                                 value={itemsPerPage}
                                 onChange={(e) => setItemsPerPage(Number(e.target.value))}
@@ -1388,7 +1402,6 @@ export default function ProductosPage() {
                                 <option value={50}>50 p/p</option>
                             </select>
                         </div>
-
                     </div>
 
                     <div className="overflow-x-auto">
@@ -1405,9 +1418,10 @@ export default function ProductosPage() {
                                     <th onClick={() => handleSort('category')} className="py-2 px-2.5 cursor-pointer hover:bg-slate-200/50 transition-colors">
                                         Categoría {sortField === 'category' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
                                     </th>
-                                    <th className="py-2 px-2.5">Proveedor</th>
+                                    {/* COLUMNA NUEVA EN LA TABLA */}
+                                    <th className="py-2 px-2.5 text-center">Destacado</th>
+
                                     <th className="py-2 px-2.5 text-right">Costo Total</th>
-                                    <th className="py-2 px-2.5 text-center">Margen</th>
                                     <th onClick={() => handleSort('price')} className="py-2 px-2.5 text-right cursor-pointer hover:bg-slate-200/50 transition-colors">
                                         Precio Final {sortField === 'price' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
                                     </th>
@@ -1460,14 +1474,14 @@ export default function ProductosPage() {
                                                         {prod.category?.name || 'Sin categoría'}
                                                     </span>
                                                 </td>
-                                                <td className="py-2 px-2.5 text-slate-500 font-medium">
-                                                    {prod.supplier?.name || '-'}
+
+                                                {/* INDICADOR DE DESTACADO EN TABLA */}
+                                                <td className="py-2 px-2.5 text-center">
+                                                    {prod.destacado ? <span title="Destacado en Inicio">⭐</span> : <span className="text-slate-300">-</span>}
                                                 </td>
+
                                                 <td className="py-2 px-2.5 text-right font-semibold text-slate-600 font-mono">
                                                     ${totalCost.toLocaleString('es-AR')}
-                                                </td>
-                                                <td className="py-2 px-2.5 text-center font-semibold text-slate-500">
-                                                    {prod.margin}%
                                                 </td>
                                                 <td className="py-2 px-2.5 text-right font-black text-emerald-700 font-mono">
                                                     ${prod.price.toLocaleString('es-AR')}

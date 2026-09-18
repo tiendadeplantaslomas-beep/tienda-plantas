@@ -1,7 +1,7 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { unstable_cache, revalidateTag } from 'next/cache';
+import { unstable_cache, revalidateTag, revalidatePath } from 'next/cache';
 import { v2 as cloudinary } from 'cloudinary';
 
 // ----------------------------------------------------------------------
@@ -34,6 +34,7 @@ export interface SaveProductInput {
     description?: string;
     imageUrl?: string;
     trackStock?: boolean;
+    destacado?: boolean; // <-- 1. Agregado aquí para que TypeScript lo reconozca
 }
 
 // ----------------------------------------------------------------------
@@ -161,12 +162,11 @@ export async function getProducts() {
         const rawProducts = await prisma.product.findMany({
             orderBy: { updatedAt: 'desc' },
             include: {
-                category: true, // Relación correcta con la categoría
-                supplier: true, // Relación correcta con el proveedor
+                category: true,
+                supplier: true,
             },
         });
 
-        // Convertimos los campos numéricos si es necesario para asegurar la serialización
         const products = rawProducts.map((p) => ({
             ...p,
             price: Number(p.price),
@@ -193,7 +193,6 @@ export async function generateNextProductCode(categoryId: string): Promise<strin
         });
         const prefix = category ? category.name.substring(0, 3).toUpperCase() : 'PRO';
 
-        // Bucle inteligente para buscar un código libre y evitar colisiones
         let counter = 1;
         let candidateCode = '';
         let exists = true;
@@ -239,7 +238,6 @@ export async function saveProduct(data: SaveProductInput) {
             console.log('Categoría anterior en BD:', existingProduct?.categoryId);
 
             if (existingProduct) {
-                // Si la categoría cambió respecto a la almacenada, FORZAMOS la creación de un nuevo código
                 if (existingProduct.categoryId !== data.categoryId) {
                     finalCode = await generateNextProductCode(data.categoryId);
                     console.log('¡Categoría cambiada! Nuevo código generado:', finalCode);
@@ -299,6 +297,7 @@ export async function saveProduct(data: SaveProductInput) {
             stock: Math.round(data.stock ?? 0),
             minStock: Math.round(data.minStock ?? 2),
             trackStock: data.trackStock ?? true,
+            destacado: Boolean(data.destacado), // <-- 2. Mapeado y convertido a booleano para Prisma
         };
 
         if (data.id) {
@@ -311,6 +310,9 @@ export async function saveProduct(data: SaveProductInput) {
                 data: productData,
             });
         }
+        // --- AGREGAR ESTO PARA FRESCA LA CACHÉ ---
+        revalidatePath('/');       // Limpia la caché de la landing page
+        revalidatePath('/tienda'); // Limpia la caché de la tienda
 
         return { success: true };
     } catch (error: any) {
