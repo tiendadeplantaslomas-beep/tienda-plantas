@@ -1,0 +1,43 @@
+[
+  {
+    "issuetype": "Epic",
+    "summary": "Módulo Unificado de Clientes y Personal (RBAC)",
+    "description": "Épica inicial desde foja cero para la gestión unificada del padrón de clientes omnicanal y el control de accesos del personal interno."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-01: Interfaz por Solapas (Omnicanal y Personal)",
+    "description": "Implementar navegación por pestañas en la interfaz para alternar fluidamente entre la base de clientes y la gestión de empleados."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 1.1: Maquetado de solapas y formulario dinámico",
+    "description": "Diseñar componente de pestañas con Tailwind CSS y asegurar la reactividad del estado activo."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-02: Alta y Seguridad de Personal Interno",
+    "description": "Gestión segura de empleados con validación estricta de credenciales, contraseñas obligatorias y asignación de roles."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 2.1: Validación de contraseña y selector de roles (ADMIN, CAJERO, etc.)",
+    "description": "Configurar los campos del formulario de personal para requerir contraseña segura y dropdown de perfiles."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-03: Filtros y Badges Omnicanal en Tablas",
+    "description": "Visualización clara del origen de los clientes mediante etiquetas de colores y barras de búsqueda rápida."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 3.1: Desarrollo de componentes de badges y filtrado de tablas",
+    "description": "Implementar etiquetas visuales según el canal de origen (Web, POS, Presencial) y filtros en tiempo real."
+  }
+]

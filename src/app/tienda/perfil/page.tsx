@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import UserProfileClient from './UserProfileClient';
+import UserProfileClient from '../UserProfileClient';
 
 export default async function ProfilePage() {
     const cookieStore = await cookies();
@@ -26,5 +26,5 @@ export default async function ProfilePage() {
         redirect('/tienda/login');
     }
 
-    return <UserProfileClient initialCustomer={customer} />;
+    return <UserProfileClient initialCustomer={customer} isAdmin={false} />;
 }

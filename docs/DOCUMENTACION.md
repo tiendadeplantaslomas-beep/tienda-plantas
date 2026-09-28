@@ -1,90 +1,93 @@
-# 📖 Documentación del Sistema de Gestión Comercial y Vivero
+# 🌿 Tienda de Plantas - Sistema Integrado ERP / CRM / E-commerce & PMO
 
-**Versión:** 1.2.0  
-**Última actualización:** Agosto 2026  
-**Tecnologías:** Next.js (App Router), TypeScript, Tailwind CSS, Prisma, PostgreSQL.
+Sistema integral full-stack desarrollado para la gestión omnicanal de viveros, abarcando desde el control de inventario y cultivo, pasando por el punto de venta (POS) y la tienda web (E-commerce), hasta la logística de entrega y la gestión ágil de proyectos (PMO).
 
 ---
 
-## 🎯 1. Visión General del Proyecto
-Sistema web integral diseñado para la administración comercial, control de inventario, punto de venta (POS), arqueo financiero de caja y gestión especializada para vivero.
+## 🚀 1. Stack Tecnológico
 
-### 🎨 Sistema de Diseño y UI
-Toda la interfaz cuenta con una línea estética unificada:
-* **Paleta base:** `Slate` (fondos, contenedores y bordes).
-* **Acentos:** `Emerald` (ventas, métricas positivas, acciones principales), `Sky` (transferencias, envíos), `Indigo/Purple` (tarjetas/crédito) y `Rose` (alertas/cancelaciones).
-* **Diseño:** Sin scrollbars innecesarias, vistas compactas e interactivas, tipografía marcada y estados vacíos claros.
-
----
-
-## 🧱 2. Estructura de Módulos y Rutas
-
-```text
-src/
-├── actions/              # Server Actions (Productos, Ventas, Clientes, Reportes)
-├── docs/
-│   └── documentacion.md  # Documentación técnica y funcional
-└── app/
-    ├── (admin)/          # Panel de Administración Protegido
-    │   ├── layout.tsx    # Layout con navegación general
-    │   ├── page.tsx      # Landing Page / Hub Principal (En desarrollo)
-    │   ├── caja/         # Resumen y Arqueo Diario de Caja
-    │   ├── compras/      # Gestión de Proveedores y Compras
-    │   ├── productos/    # Catálogo General y Precios
-    │   ├── stock/        # Control de Inventario
-    │   ├── ventas/       # Punto de Venta (POS)
-    │   │   └── historial/ # Reportes e Informes Acumulados
-    │   └── vivero/       # Módulo Especializado Vivero
-    │       └── _components/ # Componentes del ecosistema vivero
-    └── login/            # Acceso de usuarios
-
-
-    # Documentación Funcional del Sistema — Panel Comercial y Vivero
-
-## 1. Arquitectura y Estructura del Proyecto
-El sistema está desarrollado con **Next.js (App Router)** utilizando **Route Groups** bajo la carpeta `app/(admin)/` para aislar las vistas protegidas del panel de control general y la terminal de caja.
-
-### Estructura de Directorios del Sistema
-- **`caja/`**: Gestión de tesorería, arqueos de caja y cierres de turno.
-- **`compras/`**: Abastecimiento, órdenes de compra y gestión de proveedores.
-- **`dashboard/`**: Panel métrico centralizado con gráficos de evolución de ventas sincronizados en tiempo real mediante Prisma.
-- **`productos/`**: Catálogo general de artículos, precios, marcas y costos de adquisición.
-- **`stock/`**: Control de inventario, ajustes operativos y recepción de remitos.
-- **`ventas/`**: Punto de venta (POS) y subcarpeta `historial` de transacciones.
-- **`vivero/`**: Módulo botánico especializado en especies, sustratos e insumos específicos.
+* **Framework Full-Stack:** Next.js (App Router) con TypeScript.
+* **Estilos y UI:** Tailwind CSS para un diseño responsivo y moderno.
+* **Base de Datos & ORM:** TiDB Cloud (SQL Distribuido) gestionado mediante Prisma ORM.
+* **Autenticación:** NextAuth.js con autenticación basada en credenciales y cifrado `bcryptjs`.
+* **Gestión de Proyectos:** Integración nativa con Jira Cloud REST API para automatización PMO.
 
 ---
 
-## 2. Roles y Permisos de Acceso
-- **ADMIN (Administrador General):** Control total del sistema. Acceso a reportes globales de ventas, gestión de costos, altas de stock, ajustes de inventario y supervisión general.
-- **CAJERO (Operador de Terminal):** Acceso restringido al Punto de Venta (POS), registro de cobros de su turno y operaciones operativas de mostrador.
+## 📂 2. Arquitectura de Módulos del Sistema
+
+### A. Autenticación y Control de Accesos (RBAC)
+* **Padrón Centralizado (`Customer`):** Almacena tanto a clientes finales como al personal interno en una sola tabla relacional utilizando un campo de rol dinámico (`role`).
+* **Roles del Personal Interno:**
+  * `ADMIN`: Acceso total al sistema, configuración general y administración de usuarios.
+  * `CAJERO`: Acceso exclusivo al terminal POS, caja diaria y registro de cobros.
+  * `OPERADOR`: Gestión de atención omnicanal y seguimiento de clientes.
+  * `DEPOSITO`: Control de stock, recepción de mercadería y preparación de envíos.
+* **Perfiles de Clientes:** `cliente_web` (E-commerce), `cliente_presencial` (Mostrador) y `cliente_pos`.
+
+### B. ERP e Inventario de Vivero
+* **Fichas Técnicas Botánicas:** Registro detallado de especies de interior y exterior, requerimientos lumínicos, riego, sustratos y fertilizantes.
+* **Control de Stock en Tiempo Real:** Descuento automático de inventario ante transacciones web o presenciales.
+* **Alertas y Lotes:** Gestión de stock mínimo y control de mermas o producción.
+
+### C. CRM y Gestión Omnicanal
+* **Fichas de Compradores:** Historial comercial, direcciones de envío y preferencias de jardinería.
+* **Etiquetado Visual (Badges):** Identificación inmediata del canal de origen de cada interacción o venta.
+
+### D. E-commerce y Punto de Venta (POS)
+* **Tienda Pública Web:** Catálogo visual con filtros avanzados por tipo de planta y cuidados.
+* **Terminal POS (Mostrador):** Interfaz optimizada para el cobro rápido en tienda física, emisión de comprobantes y selección de medios de pago (efectivo, transferencia, tarjetas).
+
+### E. Logística y Distribución
+* **Planificador de Envíos:** Agrupamiento de despachos por zonas y estados de trazabilidad (`Preparando`, `En Camino`, `Entregado`).
+* **Hojas de Ruta:** Generación de reportes de entrega para transportistas con instrucciones de manipulación vegetal.
+
+### F. Integración PMO / Jira
+* **Tablero y Listado Paginado:** Consumo de tickets desde la API de Jira Cloud.
+* **Creación Jerárquica:** Alta asistida de Épicas, Historias de Usuario, Tareas y Subtareas validando relaciones padre/hijo.
+* **Ejecutor Masivo de Scripts (TXTaJira):** Modal interactivo para la importación y carga secuencial de backlogs mediante archivos JSON/TXT.
 
 ---
 
-## 3. Reglas de Negocio y Lógica de Validación
+## 🛠️ 3. Configuración y Despliegue Local
 
-### A. Módulo de Ventas (`ventas`)
-- **Transaccionalidad Atómica:** Las operaciones de venta se ejecutan mediante transacciones atómicas en base de datos (`prisma.$transaction`) para garantizar que el descuento de stock, el registro del cobro y la emisión del comprobante ocurran de forma simultánea e íntegra.
-- **Validación de Existencias:** Se bloquea la concreción de la venta si la cantidad solicitada supera el stock disponible del producto.
+1. **Clonar el repositorio e instalar dependencias:**
+   ```bash
+   git clone <url-repositorio>
+   cd tienda-de-plantas
+   npm install
 
-### B. Módulo de Stock (`stock`)
-- **Prevención de Stock Negativo:** Ningún movimiento de salida o ajuste manual puede dejar las existencias de un ítem en valores negativos.
-- **Alertas de Umbral Crítico:** Verificación automática de stock bajo frente al mínimo configurado para disparar avisos de reposición.
+###  MEJORAS 28/09/2026
+   ## Módulo: Panel de Control (Dashboard Admin)
 
-### C. Módulo de Caja (`caja`)
-- **Apertura Obligatoria de Turno:** Se impide registrar cobros o transacciones comerciales si no existe una sesión de caja abierta con un fondo inicial declarado.
-- **Control de Cierre:** Validación estricta entre el balance acumulado por el sistema y el efectivo o medios de pago contados en el arqueo físico.
+### 1. Descripción General
+El Panel de Control principal (`/dashboard`) ha sido refactorizado para eliminar por completo los valores estáticos o *hardcodeados*. Ahora opera de manera 100% dinámica mediante consultas en tiempo real a la base de datos (TiDB), garantizando la sincronización automática de la información del usuario y las métricas operativas del negocio.
 
-### D. Módulo de Compras (`compras`)
-- **Validación de Proveedores:** Restricción para emitir órdenes de compra únicamente a proveedores habilitados en el sistema.
-- **Control de Recepción:** Consistencia cruzada entre las cantidades solicitadas en la orden y los remitos ingresados al almacén.
+---
 
-### E. Módulo de Productos (`productos`)
-- **Integridad de SKUs:** Control de unicidad estricta en los códigos de identificación de artículos.
-- **Margen Comercial:** Validación de que el precio de venta configurado nunca sea inferior al costo de adquisición.
+### 2. Especificaciones Técnicas y Funcionales
 
-### F. Módulo de Vivero (`vivero`)
-- **Trazabilidad Botánica:** Seguimiento de lotes y características particulares de especies vegetales.
-- **Compatibilidad de Insumos:** Asociación lógica entre las especies y los sustratos o fertilizantes aptos para su cuidado.
+#### A. Sincronización del Perfil de Usuario (`Usuario Activo`)
+* **Comportamiento previo:** La interfaz utilizaba exclusivamente los datos de la cookie inicial de la sesión de NextAuth (`useSession`), lo cual impedía ver reflejados los cambios de nombre, correo o avatar de forma inmediata tras modificar el perfil sin requerir un nuevo inicio de sesión.
+* **Comportamiento actual:** Se implementó una llamada asíncrona al endpoint `/api/admin/perfil` durante la carga del dashboard, asegurando que:
+  * El nombre y correo electrónico se actualicen dinámicamente desde la base de datos.
+  * La imagen o avatar refleje instantáneamente cualquier actualización realizada por el usuario en su perfil.
 
+#### B. Dinamización del Panel de Actividad y Estado de Caja
+Se eliminaron todos los valores estáticos en la sección lateral de actividad, integrando un nuevo servicio backend (`/api/admin/dashboard-stats`) que alimenta las siguientes métricas en tiempo real:
 
+1. **Arqueo de Turno (Estado de Caja):**
+   * **Lógica implementada:** El sistema consulta la tabla `CashClosure` filtrando por la fecha actual del sistema (`YYYY-MM-DD`).
+   * **Indicadores visuales:**
+     * *Al Día (Verde):* Se registra un cierre completado para el día de la fecha.
+     * *Abierta / Pendiente (Amarillo/Alerta):* No existe registro de cierre para el día actual, advirtiendo al operador que la caja sigue abierta.
+2. **Métrica de Facturas (Ventas):**
+   * Consulta el conteo real y actualizado de registros en la tabla `Sale` de la base de datos.
+3. **Métrica de Pedidos (Compras):**
+   * Consulta el conteo real y actualizado de órdenes de abastecimiento en la tabla `Purchase`.
+
+---
+
+### 3. Endpoints Asociados
+* **`GET /api/admin/dashboard-stats`**: Retorna el estado de la caja de hoy (`cajaPendiente`), el total de facturas (`facturasCount`) y el total de pedidos (`pedidosCount`).
+* **`GET /api/admin/perfil`**: Provee los datos actualizados del usuario activo para el panel lateral y la vista de perfil.

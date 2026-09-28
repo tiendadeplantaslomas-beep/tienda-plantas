@@ -1,0 +1,43 @@
+[
+  {
+    "issuetype": "Epic",
+    "summary": "Módulo de Integración Jira & Automatización PMO",
+    "description": "Épica para el desarrollo del panel de control y sincronización directa con la API de Jira para la gestión ágil del proyecto."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-01: Conexión API y Listado Paginado de Tickets",
+    "description": "Consumo del endpoint de Jira para obtener, renderizar y paginar el historial de tareas activas."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 1.1: Configuración de cliente API y paginador de 6 ítems",
+    "description": "Establecer llamadas fetch al backend de Jira, manejo de estados de carga y controles de paginación."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-02: Formulario de Creación con Jerarquía (Padre/Hijo)",
+    "description": "Permitir la creación manual de Épicas, Historias, Tareas y Subtareas validando su relación jerárquica."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 2.1: Filtrado dinámico de elementos padres según el tipo de ticket",
+    "description": "Asegurar que una Historia solo despliegue Épicas disponibles como padre, y una Tarea despliegue HUs o Épicas."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-03: Ejecutor Masivo de Scripts (TXTaJira)",
+    "description": "Modal flotante avanzado para la subida de archivos TXT/JSON y ejecución secuencial automatizada."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 3.1: Implementación de FileReader y consola interactiva de carga",
+    "description": "Desarrollar interfaz con soporte de subida de archivos locales, plantilla de ejemplo y feedback de éxito."
+  }
+]

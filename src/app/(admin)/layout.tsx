@@ -3,18 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { SessionProvider, useSession, signOut } from 'next-auth/react';
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     const [fechaActual, setFechaActual] = useState('');
     const pathname = usePathname();
+    const { data: session } = useSession();
 
     const esDashboard = pathname === '/dashboard';
 
-    const usuarioLogueado = {
-        nombre: 'Daniel Urraca',
-        rol: 'Administrador General',
-        sucursal: 'Lomas de Zamora'
-    };
+    // Datos dinámicos de la sesión de NextAuth
+    const userName = session?.user?.name || 'Administrador';
+    const userRole = (session?.user as any)?.role || 'ADMIN';
+    const userEmail = session?.user?.email || '';
 
     useEffect(() => {
         const hoy = new Date();
@@ -60,10 +61,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
                         <div className="hidden md:flex flex-col items-end text-right">
                             <span className="text-[11px] font-bold text-slate-800 leading-tight">
-                                {usuarioLogueado.nombre}
+                                {userName}
                             </span>
-                            <span className="text-[9px] text-slate-500 font-medium">
-                                {usuarioLogueado.rol} &bull; {usuarioLogueado.sucursal}
+                            <span className="text-[9px] text-emerald-700 font-bold">
+                                Rol: {userRole} &bull; Lomas de Zamora
                             </span>
                         </div>
 
@@ -86,6 +87,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                 <span>🌐</span>
                                 <span>Tienda Pública</span>
                             </a>
+                            <button
+                                onClick={() => signOut({ callbackUrl: '/login' })}
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-bold rounded shadow-2xs transition-all cursor-pointer font-bold"
+                                title="Cerrar Sesión"
+                            >
+                                Salir
+                            </button>
                         </div>
                     </div>
                 </header>
@@ -103,10 +111,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </div>
                     <div className="flex items-center gap-2">
                         <span>Sistema de Gestión de Vivero</span>
-                        <span className="font-bold text-slate-700">v2.4.0</span>
+                        <span className="font-bold text-slate-700">v2.5.0 RBAC</span>
                     </div>
                 </footer>
             </div>
         </div>
+    );
+}
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <SessionProvider>
+            <AdminLayoutContent>{children}</AdminLayoutContent>
+        </SessionProvider>
     );
 }

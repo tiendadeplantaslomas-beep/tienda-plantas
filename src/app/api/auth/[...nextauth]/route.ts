@@ -1,5 +1,9 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+
+const prisma = new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -10,39 +14,69 @@ export const authOptions: NextAuthOptions = {
                 password: { label: "Password", type: "password" }
             },
             async authorize(credentials) {
-                // 🔓 BYPASS TOTAL: No miramos base de datos, no miramos inputs. 
-                // Devolvemos el usuario limpio para que NextAuth arme la cookie sí o sí.
-                console.log("🔓 Forzando la creación de sesión del vivero...");
+                if (!credentials?.email || !credentials?.password) {
+                    throw new Error("Por favor, ingresa correo y contraseña.");
+                }
+
+                // Buscamos al usuario/personal en la tabla Customer
+                const user = await prisma.customer.findUnique({
+                    where: { email: credentials.email }
+                });
+
+                if (!user) {
+                    throw new Error("Usuario no encontrado.");
+                }
+
+                // Validamos la contraseña con bcrypt
+                const isValid = await bcrypt.compare(credentials.password, user.password_hash);
+                if (!isValid) {
+                    throw new Error("Contraseña incorrecta.");
+                }
+
+                // Devolvemos el usuario con su rol, nombre e imagen de la base de datos
                 return {
-                    id: "admin-123",
-                    name: "Daniel",
-                    email: "tiendadeplantas.lomas@gmail.com",
-                    role: "ADMIN"
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                    image: user.image_url // 👈 Incluimos la foto para que viaje en la sesión inicial
                 };
             }
         })
     ],
-    // Forzamos el secreto acá adentro por si Next.js se marea leyendo el archivo .env
     secret: "UnaFraseUltraSecretaYOlgaParaElVivero2026!",
     session: {
         strategy: "jwt",
-        maxAge: 30 * 24 * 60 * 60, // 30 días
+        maxAge: 30 * 24 * 60 * 60,
     },
     pages: {
         signIn: "/login"
     },
-    // Desactivamos temporalmente los callbacks para que nada frene la creación del JWT
     callbacks: {
-        async jwt({ token, user }) {
-            if (user) token.role = "ADMIN";
+        async jwt({ token, user, trigger, session }) {
+            // Cuando inicia sesión por primera vez
+            if (user) {
+                token.role = (user as any).role;
+                token.image = (user as any).image;
+            }
+
+            // 👇 Captura la actualización en caliente enviada desde el perfil
+            if (trigger === "update") {
+                if (session?.name) token.name = session.name;
+                if (session?.image) token.image = session.image;
+            }
+
             return token;
         },
         async session({ session, token }) {
-            if (session.user) (session.user as any).role = "ADMIN";
+            if (session.user) {
+                (session.user as any).role = token.role;
+                session.user.image = token.image as string; // 👈 Asigna la imagen actualizada
+                session.user.name = token.name as string;   // 👈 Asigna el nombre actualizado
+            }
             return session;
         }
-    },
-    debug: true // Esto nos va a escupir el error real en la consola negra de VS Code
+    }
 };
 
 const handler = NextAuth(authOptions);

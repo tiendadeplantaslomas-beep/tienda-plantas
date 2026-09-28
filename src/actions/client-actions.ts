@@ -1,6 +1,8 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { revalidatePath } from 'next/cache';
+import bcrypt from 'bcryptjs';
 
 export async function getClients(searchTerm?: string, sortOrder: 'asc' | 'desc' = 'asc') {
     try {
@@ -12,6 +14,7 @@ export async function getClients(searchTerm?: string, sortOrder: 'asc' | 'desc' 
                     { phone: { contains: query } },
                     { address: { contains: query, mode: 'insensitive' } },
                     { email: { contains: query, mode: 'insensitive' } },
+                    { dni_cuit: { contains: query } },
                 ]
             } : undefined,
             orderBy: {
@@ -29,7 +32,6 @@ function formatAddress(addr?: string): string {
     if (!addr || addr.trim() === '') return 'SIN DIRECCIÓN';
     let cleanAddr = addr.trim().toUpperCase();
 
-    // Aseguramos formato limpio para Maps (Calle y N°, C.P., Localidad, Provincia, Argentina)
     if (!cleanAddr.includes('BUENOS AIRES') && !cleanAddr.includes('ARGENTINA') && !cleanAddr.includes('CABA')) {
         cleanAddr = `${cleanAddr}, BUENOS AIRES, ARGENTINA`;
     } else if (!cleanAddr.includes('ARGENTINA')) {
@@ -39,7 +41,7 @@ function formatAddress(addr?: string): string {
     return cleanAddr;
 }
 
-export async function createClient(data: { name: string; phone?: string; address?: string; email: string; dni_cuit?: string }) {
+export async function createClient(data: { name: string; phone?: string; address?: string; email: string; dni_cuit?: string; role?: string }) {
     try {
         if (!data.name || data.name.trim() === '') {
             return { error: 'El nombre y apellido del cliente son obligatorios.' };
@@ -50,6 +52,7 @@ export async function createClient(data: { name: string; phone?: string; address
         }
 
         const formattedAddress = formatAddress(data.address);
+        const password_hash = await bcrypt.hash('Plantas123*', 10);
 
         const newClient = await prisma.customer.create({
             data: {
@@ -57,11 +60,16 @@ export async function createClient(data: { name: string; phone?: string; address
                 phone: data.phone?.trim() || 'S/N',
                 address: formattedAddress,
                 email: data.email.trim().toLowerCase(),
-                password_hash: 'NO_PASSWORD',
+                password_hash,
                 dni_cuit: data.dni_cuit?.trim() || '00000000',
+                role: data.role || 'cliente_presencial',
+                origin: 'admin'
             }
         });
 
+        revalidatePath('/admin/clientes');
+        revalidatePath('/clientes');
+        revalidatePath('/vivero');
         return { success: true, client: newClient };
     } catch (error: any) {
         console.error('Error al crear cliente:', error);
@@ -72,7 +80,7 @@ export async function createClient(data: { name: string; phone?: string; address
     }
 }
 
-export async function updateClient(id: string, data: { name: string; phone?: string; address?: string; email: string; dni_cuit?: string }) {
+export async function updateClient(id: string, data: { name: string; phone?: string; address?: string; email: string; dni_cuit?: string; role?: string }) {
     try {
         if (!data.name || data.name.trim() === '') {
             return { error: 'El nombre y apellido del cliente son obligatorios.' };
@@ -92,9 +100,13 @@ export async function updateClient(id: string, data: { name: string; phone?: str
                 address: formattedAddress,
                 email: data.email.trim().toLowerCase(),
                 ...(data.dni_cuit ? { dni_cuit: data.dni_cuit.trim() } : {}),
+                ...(data.role ? { role: data.role } : {}),
             }
         });
 
+        revalidatePath('/admin/clientes');
+        revalidatePath('/clientes');
+        revalidatePath('/vivero');
         return { success: true, client: updatedClient };
     } catch (error: any) {
         console.error('Error al actualizar cliente:', error);
@@ -110,9 +122,17 @@ export async function deleteClient(id: string) {
         await prisma.customer.delete({
             where: { id }
         });
+
+        revalidatePath('/admin/clientes');
+        revalidatePath('/clientes');
+        revalidatePath('/vivero');
         return { success: true };
     } catch (error) {
         console.error('Error al eliminar cliente:', error);
         return { error: 'Ocurrió un error al eliminar el cliente.' };
     }
 }
+
+// Aliases de compatibilidad con vistas de ventas / POS
+export const getCustomers = getClients;
+export const createCustomer = createClient;

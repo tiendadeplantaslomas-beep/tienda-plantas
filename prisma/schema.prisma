@@ -144,22 +144,17 @@ model PurchaseItem {
 // CLIENTES
 // -------------------------------------------------------------
 model Customer {
-  id                 String              @id @default(cuid())
-  name               String
-  email              String              @unique
-  password_hash      String
-  phone              String
-  address            String
-  dni_cuit           String
-  gender             String?             @default("neutral")
-  image_url          String?
-  email_verified     Int                 @default(0)
-  verification_token String?
-  origin             String              @default("tienda")
-  created_at         DateTime            @default(now())
-  sales              Sale[]
-  payments           Payment[]
-  customerPromotions CustomerPromotion[]
+  id             String   @id @default(cuid())
+  name           String?
+  email          String   @unique
+  password_hash  String
+  phone          String?
+  address        String?
+  dni_cuit       String?
+  gender         String?
+  image_url      String?  @db.LongText   // <-- Asegúrate de que tenga @db.LongText aquí
+  role           String   @default("ADMIN")
+  // ... resto de tus campos
 }
 
 // -------------------------------------------------------------

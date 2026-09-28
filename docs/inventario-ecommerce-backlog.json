@@ -1,0 +1,36 @@
+[
+  {
+    "issuetype": "Epic",
+    "summary": "Módulo de Inventario, Cultivo y Vivero",
+    "description": "Gestión integral de especies de plantas (interior y exterior), fertilizantes, sustratos y accesorios de jardinería."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-01: Fichas Técnicas y Control de Stock",
+    "description": "Administración de stock en tiempo real, alertas de stock mínimo y control de mermas o floración."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 1.1: Base de datos de productos y categorías de jardinería",
+    "description": "Diseñar esquema SQL para especies, costos, precios mayoristas/minoristas y proveedores."
+  },
+  {
+    "issuetype": "Epic",
+    "summary": "Módulo E-commerce & Tienda Pública",
+    "description": "Desarrollo de la plataforma web de cara al público para la comercialización online de plantas y accesorios."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-01: Catálogo Web Omnicanal y Filtros",
+    "description": "Visualización atractiva de plantas con filtros por tipo de luz, riego y tamaño, sincronizados con el ERP."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 1.1: Sincronización automática de stock ERP ⇄ E-commerce",
+    "description": "Evitar quiebres de stock actualizando las unidades disponibles de forma inmediata al concretar una venta web o física."
+  }
+]

@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Camera, Key, User, Package, CreditCard, ShieldCheck, Mail, Phone, MapPin, Eye, EyeOff, Tag } from 'lucide-react';
 import CustomerCouponsSection from '@/components/CustomerCouponsSection';
 
-// Función auxiliar para desglosar la dirección vieja de la DB en campos individuales
 const parseInitialAddress = (addr = '') => {
     if (!addr) return { street: '', number: '', floorDept: '', postalCode: '', city: '' };
 
@@ -39,12 +38,12 @@ const parseInitialAddress = (addr = '') => {
     return { street, number, floorDept: '', postalCode, city };
 };
 
-export default function UserProfileClient({ initialCustomer }: { initialCustomer: any }) {
+export default function UserProfileClient({ initialCustomer, isAdmin = false }: { initialCustomer: any; isAdmin?: boolean }) {
     const router = useRouter();
     const safeCustomer = initialCustomer || {};
 
     const [customer, setCustomer] = useState<any>(safeCustomer);
-    const [activeTab, setActiveTab] = useState<'profile' | 'payment' | 'avatar' | 'security' | 'orders' | 'coupons'>('profile');
+    const [activeTab, setActiveTab] = useState<string>('profile');
 
     const [selectedGender, setSelectedGender] = useState(safeCustomer.gender || 'neutral');
     const [customImage, setCustomImage] = useState<string | null>(safeCustomer.image_url || null);
@@ -74,16 +73,14 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
 
-    // Estados para el historial de compras
     const [orders, setOrders] = useState<any[]>([]);
     const [loadingOrders, setLoadingOrders] = useState(false);
 
-    // Cargar historial de compras al hacer clic en la solapa de órdenes
     useEffect(() => {
-        if (activeTab === 'orders' && orders.length === 0) {
+        if (activeTab === 'orders' && orders.length === 0 && !isAdmin) {
             fetchCustomerOrders();
         }
-    }, [activeTab]);
+    }, [activeTab, isAdmin]);
 
     const fetchCustomerOrders = async () => {
         setLoadingOrders(true);
@@ -142,17 +139,20 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
     const handleSaveAvatar = async () => {
         setLoading(true);
         setMessage({ text: '', type: '' });
+        const endpoint = isAdmin ? '/api/admin/update-avatar' : '/api/tienda/customer/update-avatar';
+        const payloadKey = isAdmin ? 'adminId' : 'customerId';
+
         try {
-            const res = await fetch('/api/tienda/customer/update-avatar', {
+            const res = await fetch(endpoint, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ customerId: customer.id, gender: selectedGender, imageUrl: customImage })
+                body: JSON.stringify({ [payloadKey]: customer.id, gender: selectedGender, imageUrl: customImage })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Error al actualizar');
+            if (!res.ok) throw new Error(data.error || 'Error al actualizar avatar');
 
-            setCustomer(data.customer);
-            showNotification('Avatar actualizado con éxito en la base de datos', 'success');
+            setCustomer(isAdmin ? data.admin : data.customer);
+            showNotification('Avatar actualizado con éxito', 'success');
             router.refresh();
         } catch (err: any) {
             showNotification(err.message, 'error');
@@ -167,13 +167,15 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
         setMessage({ text: '', type: '' });
 
         const fullAddress = `${editForm.street} ${editForm.number}${editForm.floorDept ? `, ${editForm.floorDept}` : ''} (${editForm.postalCode}), ${editForm.city}, ${editForm.province}, ${editForm.country}`;
+        const endpoint = isAdmin ? '/api/admin/update-profile' : '/api/tienda/customer/update-profile';
+        const payloadKey = isAdmin ? 'adminId' : 'customerId';
 
         try {
-            const res = await fetch('/api/tienda/customer/update-profile', {
+            const res = await fetch(endpoint, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    customerId: customer.id,
+                    [payloadKey]: customer.id,
                     name: editForm.name,
                     phone: editForm.phone,
                     address: fullAddress,
@@ -184,7 +186,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Error al actualizar perfil');
 
-            setCustomer(data.customer);
+            setCustomer(isAdmin ? data.admin : data.customer);
             showNotification('Datos actualizados con éxito', 'success');
             router.refresh();
         } catch (err: any) {
@@ -203,12 +205,15 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
 
         setLoading(true);
         setMessage({ text: '', type: '' });
+        const endpoint = isAdmin ? '/api/admin/change-password' : '/api/tienda/customer/change-password';
+        const payloadKey = isAdmin ? 'adminId' : 'customerId';
+
         try {
-            const res = await fetch('/api/tienda/customer/change-password', {
+            const res = await fetch(endpoint, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    customerId: customer.id,
+                    [payloadKey]: customer.id,
                     currentPassword: passForm.currentPassword,
                     newPassword: passForm.newPassword
                 })
@@ -225,15 +230,11 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
         }
     };
 
-    // Función para obtener la imagen por defecto según el género seleccionado
     const getDefaultAvatar = (gender: string) => {
         switch (gender) {
-            case 'male':
-                return '/avatar_h.png';
-            case 'female':
-                return '/avatar_m.png';
-            default:
-                return '/avatar.png';
+            case 'male': return '/avatar_h.png';
+            case 'female': return '/avatar_m.png';
+            default: return '/avatar.png';
         }
     };
 
@@ -242,10 +243,9 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
     return (
         <div className="bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6">
             <div className="max-w-6xl w-full mx-auto">
-
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-                    {/* COLUMNA IZQUIERDA: Tarjeta / Resumen de Perfil */}
+                    {/* COLUMNA IZQUIERDA: Tarjeta / Resumen */}
                     <div className="lg:col-span-4 bg-white/80 backdrop-blur-md rounded-xl p-5 shadow-sm border border-slate-200 flex flex-col items-center text-center space-y-4 sticky top-6">
                         <div className="relative">
                             <img
@@ -262,7 +262,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                             </h2>
                             <div className="pt-1">
                                 <span className="inline-flex items-center justify-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold border border-emerald-200">
-                                    <ShieldCheck className="h-3.5 w-3.5" /> Cuenta Verificada
+                                    <ShieldCheck className="h-3.5 w-3.5" /> {isAdmin ? 'Panel Administrador' : 'Cuenta Verificada'}
                                 </span>
                             </div>
                         </div>
@@ -286,7 +286,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                     {/* COLUMNA DERECHA: Solapas y Formularios */}
                     <div className="lg:col-span-8 bg-white/95 backdrop-blur-xs rounded-xl shadow-sm border border-slate-200 overflow-hidden">
 
-                        {/* Barra de solapas horizontales */}
+                        {/* Barra de solapas dinámicas */}
                         <div className="flex flex-wrap border-b border-slate-200 bg-slate-50/90 p-2 gap-1.5">
                             <button
                                 onClick={() => setActiveTab('profile')}
@@ -294,41 +294,50 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                             >
                                 <User className="h-4 w-4" /> Datos Personales
                             </button>
-                            <button
-                                onClick={() => setActiveTab('payment')}
-                                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'payment' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
-                            >
-                                <CreditCard className="h-4 w-4" /> Métodos de Pago
-                            </button>
+
+                            {!isAdmin && (
+                                <button
+                                    onClick={() => setActiveTab('payment')}
+                                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'payment' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
+                                >
+                                    <CreditCard className="h-4 w-4" /> Métodos de Pago
+                                </button>
+                            )}
+
                             <button
                                 onClick={() => setActiveTab('avatar')}
                                 className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'avatar' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
                             >
                                 <Camera className="h-4 w-4" /> Avatar
                             </button>
+
                             <button
                                 onClick={() => setActiveTab('security')}
                                 className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'security' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
                             >
                                 <Key className="h-4 w-4" /> Seguridad
                             </button>
-                            <button
-                                onClick={() => setActiveTab('orders')}
-                                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'orders' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
-                            >
-                                <Package className="h-4 w-4" /> Compras
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('coupons')}
-                                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'coupons' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
-                            >
-                                <Tag className="h-4 w-4" /> Cuponera
-                            </button>
+
+                            {!isAdmin && (
+                                <>
+                                    <button
+                                        onClick={() => setActiveTab('orders')}
+                                        className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'orders' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
+                                    >
+                                        <Package className="h-4 w-4" /> Compras
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('coupons')}
+                                        className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${activeTab === 'coupons' ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200' : 'text-slate-600 hover:bg-white/60'}`}
+                                    >
+                                        <Tag className="h-4 w-4" /> Cuponera
+                                    </button>
+                                </>
+                            )}
                         </div>
 
-                        {/* Contenido Dinámico de las solapas */}
+                        {/* Contenido */}
                         <div className="p-6">
-
                             {message.text && (
                                 <div className={`mb-4 p-3 rounded-lg text-xs font-medium transition-all ${message.type === 'error' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                                     {message.text}
@@ -368,12 +377,10 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                                 required
                                             />
                                         </div>
-
                                         <div>
                                             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Calle</label>
                                             <input
                                                 type="text"
-                                                placeholder="Ej: Perón"
                                                 value={editForm.street}
                                                 onChange={(e) => setEditForm({ ...editForm, street: e.target.value })}
                                                 className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg uppercase bg-slate-50 focus:bg-white transition"
@@ -384,7 +391,6 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Número / Altura</label>
                                             <input
                                                 type="text"
-                                                placeholder="Ej: 2026"
                                                 value={editForm.number}
                                                 onChange={(e) => setEditForm({ ...editForm, number: e.target.value })}
                                                 className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg uppercase bg-slate-50 focus:bg-white transition"
@@ -395,7 +401,6 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Piso / Depto (Opcional)</label>
                                             <input
                                                 type="text"
-                                                placeholder="Ej: 3° B"
                                                 value={editForm.floorDept}
                                                 onChange={(e) => setEditForm({ ...editForm, floorDept: e.target.value })}
                                                 className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg uppercase bg-slate-50 focus:bg-white transition"
@@ -405,7 +410,6 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Código Postal</label>
                                             <input
                                                 type="text"
-                                                placeholder="Ej: 1824"
                                                 value={editForm.postalCode}
                                                 onChange={(e) => setEditForm({ ...editForm, postalCode: e.target.value })}
                                                 className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white transition"
@@ -416,7 +420,6 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Localidad / Partido</label>
                                             <input
                                                 type="text"
-                                                placeholder="Ej: Lomas de Zamora"
                                                 value={editForm.city}
                                                 onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
                                                 className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white transition"
@@ -445,8 +448,8 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                 </form>
                             )}
 
-                            {/* Solapa 2: Métodos de Pago */}
-                            {activeTab === 'payment' && (
+                            {/* Solapa 2: Métodos de Pago (Solo Clientes) */}
+                            {!isAdmin && activeTab === 'payment' && (
                                 <form onSubmit={handleSaveProfile} className="space-y-4">
                                     <div>
                                         <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Método de Pago Preferido</label>
@@ -462,15 +465,13 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Datos o Referencia de Pago (Alias / CBU opcional)</label>
+                                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Datos o Referencia de Pago</label>
                                         <input
                                             type="text"
-                                            placeholder="Ej: ALIAS.MERCADOPAGO o Banco Provincia..."
                                             value={editForm.paymentDetails}
                                             onChange={(e) => setEditForm({ ...editForm, paymentDetails: e.target.value })}
                                             className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white transition"
                                         />
-                                        <span className="block mt-1.5 text-[11px] text-stone-400">Esta información ayuda a agilizar la validación de tus pagos en las compras.</span>
                                     </div>
                                     <div className="pt-2">
                                         <button
@@ -534,7 +535,6 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                         <div className="relative">
                                             <input
                                                 type={showCurrentPassword ? 'text' : 'password'}
-                                                placeholder="••••••••"
                                                 value={passForm.currentPassword}
                                                 onChange={(e) => setPassForm({ ...passForm, currentPassword: e.target.value })}
                                                 className="w-full px-3.5 py-2 pr-10 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white transition"
@@ -543,7 +543,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                             <button
                                                 type="button"
                                                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600 focus:outline-none cursor-pointer"
+                                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600 cursor-pointer"
                                             >
                                                 {showCurrentPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                                             </button>
@@ -554,7 +554,6 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                         <div className="relative">
                                             <input
                                                 type={showNewPassword ? 'text' : 'password'}
-                                                placeholder="••••••••"
                                                 value={passForm.newPassword}
                                                 onChange={(e) => setPassForm({ ...passForm, newPassword: e.target.value })}
                                                 className="w-full px-3.5 py-2 pr-10 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white transition"
@@ -563,7 +562,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                             <button
                                                 type="button"
                                                 onClick={() => setShowNewPassword(!showNewPassword)}
-                                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600 focus:outline-none cursor-pointer"
+                                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600 cursor-pointer"
                                             >
                                                 {showNewPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                                             </button>
@@ -574,7 +573,6 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                         <div className="relative">
                                             <input
                                                 type={showConfirmPassword ? 'text' : 'password'}
-                                                placeholder="••••••••"
                                                 value={passForm.confirmPassword}
                                                 onChange={(e) => setPassForm({ ...passForm, confirmPassword: e.target.value })}
                                                 className="w-full px-3.5 py-2 pr-10 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white transition"
@@ -583,7 +581,7 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                             <button
                                                 type="button"
                                                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600 focus:outline-none cursor-pointer"
+                                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600 cursor-pointer"
                                             >
                                                 {showConfirmPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                                             </button>
@@ -601,62 +599,34 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                 </form>
                             )}
 
-                            {/* Solapa 5: Historial de Compras */}
-                            {activeTab === 'orders' && (
+                            {/* Solapa 5: Historial de Compras (Solo Clientes) */}
+                            {!isAdmin && activeTab === 'orders' && (
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
                                         <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Mis Pedidos y Compras</h3>
-                                        <button
-                                            onClick={fetchCustomerOrders}
-                                            className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold underline cursor-pointer"
-                                        >
-                                            Actualizar
-                                        </button>
+                                        <button onClick={fetchCustomerOrders} className="text-[11px] text-emerald-600 font-semibold underline cursor-pointer">Actualizar</button>
                                     </div>
 
                                     {loadingOrders ? (
-                                        <div className="text-center py-10 text-xs text-stone-400">Cargando historial de compras...</div>
+                                        <div className="text-center py-10 text-xs text-stone-400">Cargando historial...</div>
                                     ) : orders.length === 0 ? (
                                         <div className="text-center py-10 bg-slate-50 rounded-lg border border-dashed border-slate-300">
                                             <Package className="h-10 w-10 text-stone-300 mx-auto mb-2.5" />
-                                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Sin compras registradas</h3>
-                                            <p className="text-xs text-stone-400 mt-1 max-w-sm mx-auto">Tus pedidos realizados aparecerán detallados en este sector con su respectivo estado de seguimiento.</p>
-                                            <Link
-                                                href="/tienda"
-                                                className="inline-block mt-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-5 rounded-lg transition shadow-2xs"
-                                            >
-                                                Ir a Comprar Productos
-                                            </Link>
+                                            <h3 className="text-xs font-bold text-slate-700 uppercase">Sin compras registradas</h3>
+                                            <Link href="/tienda" className="inline-block mt-4 bg-emerald-600 text-white text-xs font-bold py-2.5 px-5 rounded-lg">Ir a Comprar</Link>
                                         </div>
                                     ) : (
                                         <div className="space-y-3">
                                             {orders.map((order: any) => (
                                                 <div key={order.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
-                                                    <div className="flex flex-wrap justify-between items-center text-xs gap-2">
+                                                    <div className="flex justify-between items-center text-xs">
                                                         <span className="font-bold text-slate-800">Pedido #{order.id.slice(-6).toUpperCase()}</span>
-                                                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${order.status === 'COMPLETED' || order.status === 'APROBADO' ? 'bg-emerald-100 text-emerald-800' :
-                                                            order.status === 'PENDING' || order.status === 'PENDIENTE' ? 'bg-amber-100 text-amber-800' :
-                                                                'bg-slate-200 text-slate-700'
-                                                            }`}>
-                                                            {order.status || 'PENDIENTE'}
-                                                        </span>
+                                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">{order.status || 'PENDIENTE'}</span>
                                                     </div>
-                                                    <div className="text-[11px] text-stone-500 flex flex-wrap justify-between gap-2">
+                                                    <div className="text-[11px] text-stone-500 flex justify-between">
                                                         <span>Fecha: {new Date(order.createdAt || order.date).toLocaleDateString('es-AR')}</span>
                                                         <span className="font-bold text-slate-700">Total: ${Number(order.total || 0).toLocaleString('es-AR')}</span>
                                                     </div>
-                                                    {order.items && order.items.length > 0 && (
-                                                        <div className="border-t border-slate-200 pt-2 mt-2 text-[11px] text-stone-600 space-y-1">
-                                                            <span className="font-semibold block text-slate-700">Productos:</span>
-                                                            <ul className="list-disc list-inside space-y-0.5">
-                                                                {order.items.map((item: any, idx: number) => (
-                                                                    <li key={idx} className="truncate">
-                                                                        {item.quantity || 1}x {item.productName || item.name || 'Producto'} (${Number(item.price || 0).toLocaleString('es-AR')})
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
                                                 </div>
                                             ))}
                                         </div>
@@ -664,16 +634,14 @@ export default function UserProfileClient({ initialCustomer }: { initialCustomer
                                 </div>
                             )}
 
-                            {/* Solapa 6: Cuponera de Beneficios */}
-                            {activeTab === 'coupons' && (
+                            {/* Solapa 6: Cuponera (Solo Clientes) */}
+                            {!isAdmin && activeTab === 'coupons' && (
                                 <CustomerCouponsSection customerId={customer.id} />
                             )}
-
                         </div>
                     </div>
 
                 </div>
-
             </div>
         </div>
     );

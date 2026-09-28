@@ -1,0 +1,36 @@
+[
+  {
+    "issuetype": "Epic",
+    "summary": "Módulo de Ventas POS, Facturación y CRM",
+    "description": "Registro de transacciones comerciales, gestión de caja en el vivero y vinculación con el historial del cliente."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-01: Terminal de Venta Rápida (POS Mostrador)",
+    "description": "Interfaz optimizada para emitir tickets de venta presencial, aplicar descuentos y registrar medios de pago."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 1.1: Integración de medios de pago y emisión de comprobantes",
+    "description": "Soportar efectivo, transferencia y tarjetas, vinculando el movimiento directamente a la caja diaria."
+  },
+  {
+    "issuetype": "Epic",
+    "summary": "Módulo de Logística, Envíos y Distribución",
+    "description": "Organización de despachos a domicilio, armado de pedidos de plantas y gestión de fletes."
+  },
+  {
+    "issuetype": "Story",
+    "parentKey": "",
+    "summary": "HU-01: Planificador de Rutas y Estados de Envío",
+    "description": "Asignación de entregas por zonas geográficas y seguimiento del estado del pedido (Preparando, En camino, Entregado)."
+  },
+  {
+    "issuetype": "Task",
+    "parentKey": "",
+    "summary": "Tarea 1.1: Impresión de etiquetas de despacho y hoja de ruta",
+    "description": "Generar reportes de entrega optimizados para el transportista con datos de contacto y cuidados especiales de las plantas."
+  }
+]
