@@ -8,25 +8,6 @@ import ProductCarousel from './components/ProductCarousel';
 import { X, ShieldCheck, UserCheck, AlertCircle, Tag, MapPin, Sparkles, MessageSquarePlus, Send, Star, ExternalLink } from 'lucide-react';
 import CartDrawer from '@/components/CartDrawer';
 
-const BANNERS_PORTADA = [
-    {
-        id: 1,
-        titulo: 'El espacio ideal para tus plantas',
-        subtitulo: 'Encontrá variedad, asesoramiento y todo lo necesario para tu jardín y hogar.',
-        imagenUrl: 'https://images.unsplash.com/photo-1470058869958-2a77ade41c02?auto=format&fit=crop&w=1600&q=80',
-        link: '/tienda?categoria=Plantas de Interior',
-        badge: '🌿 Vivero Online'
-    },
-    {
-        id: 2,
-        titulo: 'Renová tus espacios verdes',
-        subtitulo: 'Especies de interior y exterior seleccionadas con la mejor calidad y vitalidad.',
-        imagenUrl: 'https://images.unsplash.com/photo-1512428559087-560fa5ceab42?auto=format&fit=crop&w=1600&q=80',
-        link: '/tienda?categoria=Plantas de Exterior',
-        badge: '✨ Nueva Temporada'
-    }
-];
-
 const CATEGORIAS_RAPIDAS = [
     { id: 'interior', nombre: 'Plantas de Interior', imagen: 'https://images.unsplash.com/photo-1545241047-6083a3684587?auto=format&fit=crop&w=600&q=80', link: '/tienda?categoria=Plantas de Interior' },
     { id: 'exterior', nombre: 'Plantas de Exterior', imagen: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=600&q=80', link: '/tienda?categoria=Plantas de Exterior' },
@@ -49,6 +30,7 @@ interface Reseña {
     estrellas: number;
     fecha?: string;
     createdAt?: string;
+    respuesta?: string;
 }
 
 function CountdownTimer({ hasta, onExpire }: { hasta: string; onExpire: () => void }) {
@@ -97,6 +79,8 @@ function CountdownTimer({ hasta, onExpire }: { hasta: string; onExpire: () => vo
 function TiendaContent() {
     const [products, setProducts] = useState<any[]>([]);
     const [promotions, setPromotions] = useState<any[]>([]);
+    const [banners, setBanners] = useState<any[]>([]);
+    const [cargandoBanners, setCargandoBanners] = useState(true);
     const [currentBanner, setCurrentBanner] = useState(0);
     const [currentPromo, setCurrentPromo] = useState(0);
     const WHATSAPP_NUMBER = "5491140782378";
@@ -147,6 +131,19 @@ function TiendaContent() {
             .catch(() => console.log('Error cargando promociones'));
     };
 
+    const fetchBanners = () => {
+        setCargandoBanners(true);
+        fetch(`/api/banners?t=${Date.now()}`, { cache: 'no-store' })
+            .then((res) => res.json())
+            .then((data) => {
+                if (Array.isArray(data)) {
+                    setBanners(data);
+                }
+            })
+            .catch(() => console.log('Error cargando banners'))
+            .finally(() => setCargandoBanners(false));
+    };
+
     const fetchReseñas = () => {
         fetch('/api/resenas')
             .then((res) => res.json())
@@ -174,6 +171,7 @@ function TiendaContent() {
     useEffect(() => {
         fetchReseñas();
         fetchPromotions();
+        fetchBanners();
 
         fetch('/api/products')
             .then((res) => res.json())
@@ -195,11 +193,12 @@ function TiendaContent() {
 
     // Carrusel automático para Banners
     useEffect(() => {
+        if (banners.length <= 1) return;
         const timer = setInterval(() => {
-            setCurrentBanner((prev) => (prev + 1) % BANNERS_PORTADA.length);
+            setCurrentBanner((prev) => (prev + 1) % banners.length);
         }, 6000);
         return () => clearInterval(timer);
-    }, []);
+    }, [banners.length]);
 
     // Carrusel automático para Promociones
     useEffect(() => {
@@ -272,35 +271,6 @@ function TiendaContent() {
         window.location.href = '/tienda/login';
     };
 
-    const handleSubmitResena = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!nombreResena.trim() || !comentarioResena.trim()) return;
-
-        try {
-            const res = await fetch('/api/resenas', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    nombre: nombreResena,
-                    comentario: comentarioResena,
-                    estrellas: estrellasResena
-                })
-            });
-
-            if (res.ok) {
-                setMensajeResenaExito('¡Gracias por dejarnos tu opinión!');
-                setNombreResena('');
-                setComentarioResena('');
-                setEstrellasResena(5);
-                setShowResenaForm(false);
-                fetchReseñas();
-                setTimeout(() => setMensajeResenaExito(''), 4000);
-            }
-        } catch (error) {
-            console.error('Error al enviar reseña:', error);
-        }
-    };
-
     const productosDestacados = products.filter(
         (p) => p.destacado === true || p.destacado === 1 || p.destacado === 'true'
     );
@@ -344,7 +314,6 @@ function TiendaContent() {
 
     return (
         <div className="h-full w-full overflow-y-auto flex flex-col bg-stone-50 text-stone-800 font-sans pr-1">
-            {/* Estilos para el carrusel continuo tipo marquesina */}
             <style jsx global>{`
                 @keyframes marquee {
                     0% { transform: translateX(0); }
@@ -360,47 +329,86 @@ function TiendaContent() {
                 }
             `}</style>
 
-            {/* 1. HERO / BANNER PRINCIPAL */}
+            {/* 1. HERO / BANNER PRINCIPAL DINÁMICO */}
             <section className="relative w-full h-[420px] md:h-[480px] shrink-0 overflow-hidden bg-stone-900 shadow-md">
-                {BANNERS_PORTADA.map((banner, index) => (
-                    <div
-                        key={banner.id}
-                        className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentBanner ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
-                    >
+                {cargandoBanners ? (
+                    <div className="absolute inset-0 flex items-center justify-center text-stone-400 text-xs">
+                        Cargando portadas...
+                    </div>
+                ) : banners.length === 0 ? (
+                    /* BANNER POR DEFECTO SI LA BD ESTÁ VACÍA */
+                    <div className="absolute inset-0 opacity-100 z-10">
                         <div className="absolute inset-0 z-0">
-                            <img src={banner.imagenUrl} alt={banner.titulo} className="w-full h-full object-cover opacity-60 scale-105" />
+                            <img src="https://images.unsplash.com/photo-1463936575829-25148e1db1b8?auto=format&fit=crop&w=1200&q=80" alt="Tienda de Plantas" className="w-full h-full object-cover opacity-60 scale-105" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
                         </div>
                         <div className="relative z-20 max-w-5xl mx-auto h-full flex flex-col items-center justify-center text-center px-6 space-y-4">
                             <span className="bg-emerald-600/90 text-white text-[11px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm border border-emerald-400/30">
-                                {banner.badge}
+                                🌱 Bienvenidos
                             </span>
                             <h1 className="text-3xl md:text-5xl font-black text-white tracking-tight leading-tight drop-shadow-md">
-                                {banner.titulo}
+                                Dale vida a tu hogar con nuestras plantas
                             </h1>
                             <p className="text-stone-200 text-sm md:text-base max-w-xl font-medium drop-shadow">
-                                {banner.subtitulo}
+                                Explorá nuestro catálogo de especies de interior, exterior y accesorios de jardinería.
                             </p>
                             <Link
-                                href={banner.link}
+                                href="/tienda/catalogo"
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 inline-block mt-2"
                             >
-                                Ver Colección ➔
+                                Ver Catálogo ➔
                             </Link>
                         </div>
                     </div>
-                ))}
+                ) : (
+                    banners.map((banner, index) => (
+                        <div
+                            key={banner.id}
+                            className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentBanner ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
+                        >
+                            <div className="absolute inset-0 z-0">
+                                <img src={banner.imagenUrl} alt={banner.titulo} className="w-full h-full object-cover opacity-60 scale-105" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
+                            </div>
+                            <div className="relative z-20 max-w-5xl mx-auto h-full flex flex-col items-center justify-center text-center px-6 space-y-4">
+                                {banner.badge && (
+                                    <span className="bg-emerald-600/90 text-white text-[11px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm border border-emerald-400/30">
+                                        {banner.badge}
+                                    </span>
+                                )}
+                                <h1 className="text-3xl md:text-5xl font-black text-white tracking-tight leading-tight drop-shadow-md">
+                                    {banner.titulo}
+                                </h1>
+                                {banner.subtitulo && (
+                                    <p className="text-stone-200 text-sm md:text-base max-w-xl font-medium drop-shadow">
+                                        {banner.subtitulo}
+                                    </p>
+                                )}
+                                {banner.link && (
+                                    <Link
+                                        href={banner.link}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 inline-block mt-2"
+                                    >
+                                        Ver Colección ➔
+                                    </Link>
+                                )}
+                            </div>
+                        </div>
+                    ))
+                )}
 
-                <div className="absolute bottom-4 left-0 right-0 z-30 flex justify-center gap-2">
-                    {BANNERS_PORTADA.map((_, idx) => (
-                        <button
-                            key={idx}
-                            onClick={() => setCurrentBanner(idx)}
-                            className={`h-2 rounded-full transition-all ${idx === currentBanner ? 'w-8 bg-emerald-400' : 'w-2 bg-white/50'}`}
-                            aria-label={`Slide ${idx + 1}`}
-                        />
-                    ))}
-                </div>
+                {!cargandoBanners && banners.length > 1 && (
+                    <div className="absolute bottom-4 left-0 right-0 z-30 flex justify-center gap-2">
+                        {banners.map((_, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => setCurrentBanner(idx)}
+                                className={`h-2 rounded-full transition-all ${idx === currentBanner ? 'w-8 bg-emerald-400' : 'w-2 bg-white/50'}`}
+                                aria-label={`Slide ${idx + 1}`}
+                            />
+                        ))}
+                    </div>
+                )}
             </section>
 
             {/* 2. CARRUSEL DE CATEGORÍAS */}
@@ -567,8 +575,6 @@ function TiendaContent() {
             {/* 5 y 6. SECCIÓN AGRUPADA: QUIÉNES SOMOS Y UBICACIÓN CON GOOGLE MAPS */}
             <section className="max-w-7xl w-full mx-auto px-6 py-8 shrink-0">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-
-                    {/* Quiénes Somos */}
                     <div className="bg-emerald-900 text-white rounded-3xl p-8 md:p-10 shadow-xl relative overflow-hidden flex flex-col justify-between">
                         <div className="absolute right-0 bottom-0 opacity-10 translate-x-10 translate-y-10">
                             <Sparkles className="w-80 h-80" />
@@ -596,7 +602,6 @@ function TiendaContent() {
                         </div>
                     </div>
 
-                    {/* Ubicación y Mapa Google Maps */}
                     <div className="bg-white rounded-3xl p-6 md:p-8 border border-stone-200 shadow-xs flex flex-col justify-between space-y-4">
                         <div className="space-y-3">
                             <div className="flex items-center gap-2 text-emerald-700 font-extrabold text-xs uppercase tracking-wider">
@@ -609,7 +614,6 @@ function TiendaContent() {
                             </p>
                         </div>
 
-                        {/* Mapa embebido de Google Maps */}
                         <div className="w-full h-44 rounded-2xl overflow-hidden border border-stone-200 relative bg-stone-100">
                             <iframe
                                 title="Ubicación Tienda de Plantas"
@@ -634,11 +638,10 @@ function TiendaContent() {
                             </a>
                         </div>
                     </div>
-
                 </div>
             </section>
 
-            {/* 7. SECCIÓN DE RESEÑAS CON FILTRO DE SESIÓN Y RESPUESTA DE LA TIENDA */}
+            {/* 7. SECCIÓN DE RESEÑAS */}
             <section className="max-w-7xl w-full mx-auto px-6 py-10 shrink-0 border-t border-stone-200 mt-auto space-y-6 overflow-hidden">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-stone-200/80 shadow-xs">
                     <div>
@@ -661,7 +664,6 @@ function TiendaContent() {
                     </div>
                 )}
 
-                {/* Formulario condicionado al login */}
                 {showResenaForm && (
                     <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm space-y-3 max-w-xl mx-auto animate-in fade-in">
                         {customer ? (
@@ -741,7 +743,6 @@ function TiendaContent() {
                     </div>
                 )}
 
-                {/* CARRUSEL CONTINUO (MARQUEE) CON RESPUESTA DE LA TIENDA */}
                 <div className="w-full overflow-hidden relative py-2">
                     <div className="animate-marquee flex gap-5">
                         {[...reseñas, ...reseñas].map((res, index) => (
@@ -757,7 +758,6 @@ function TiendaContent() {
                                     </div>
                                     <p className="text-xs text-stone-700 italic">&ldquo;{res.comentario}&rdquo;</p>
 
-                                    {/* Si la tienda respondió, se muestra acá */}
                                     {res.respuesta && (
                                         <div className="bg-emerald-50/80 border border-emerald-200/60 p-2.5 rounded-xl space-y-1 mt-2">
                                             <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wide block">
@@ -779,7 +779,6 @@ function TiendaContent() {
                     </div>
                 </div>
             </section>
-
 
             {/* MODAL DE ADQUISICIÓN Y VALIDACIÓN */}
             {isModalOpen && selectedPromo && (

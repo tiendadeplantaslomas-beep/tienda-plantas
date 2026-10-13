@@ -303,12 +303,12 @@ model CustomerPromotion {
 
 // -------------------------------------------------------------
 // BANNERS Y CAMPAÑAS
-// -------------------------------------------------------------
-model Banner {
+// -------------------------------------------------------------model Banner {
   id        Int      @id @default(autoincrement())
+  seccion   String   @default("hero") // <-- Este campo debe estar aquí
   titulo    String
   subtitulo String?
-  imagenUrl String
+  imagenUrl String   @db.LongText
   link      String?
   badge     String?
   orden     Int      @default(0)
