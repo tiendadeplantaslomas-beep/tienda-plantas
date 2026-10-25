@@ -67,8 +67,8 @@ export async function createSale(data: CreateSaleInput) {
         // 1. Calcular total general
         const total = data.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
 
-        // Definir valores financieros por defecto
-        const paidAmount = data.paidAmount !== undefined ? data.paidAmount : total;
+        // Definir valores financieros y operativos por defecto (respetando pedidos pendientes del POS)
+        const paidAmount = data.paidAmount !== undefined ? data.paidAmount : 0;
         const pendingBalance = data.pendingBalance !== undefined ? data.pendingBalance : Math.max(0, total - paidAmount);
         const paymentStatus = data.paymentStatus || (pendingBalance === 0 ? 'PAGADO' : paidAmount > 0 ? 'PAGO PARCIAL' : 'PENDIENTE');
         const isPaid = paidAmount >= total;
@@ -92,13 +92,14 @@ export async function createSale(data: CreateSaleInput) {
                 }
             }
 
-            // Crear la Venta General respetando los campos de tu Schema
+            // Crear la Venta General incluyendo status inicial 'REGISTRADO' y campos financieros
             const newSale = await tx.sale.create({
                 data: {
                     total: total,
                     paidAmount: paidAmount,
                     pendingBalance: pendingBalance,
                     paymentStatus: paymentStatus,
+                    status: 'REGISTRADO', // Estado operativo inicial para logística
                     paymentMethod: finalPaymentMethod,
                     paymentReference: data.paymentReference || null,
                     isPaid: isPaid,

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import Link from 'next/link';
 import { getProducts } from '@/actions/product-actions';
+import { getSuppliersForSelect, createPurchase, CreatePurchasePayload } from '@/actions/purchase-actions';
 
 interface ProductItem {
     id: string;
@@ -10,11 +12,19 @@ interface ProductItem {
     cost: number;
     price: number;
     stock: number;
+    margin?: number;
 }
 
 interface PurchaseItem extends ProductItem {
     quantity: number;
     unitCost: number;
+}
+
+interface Supplier {
+    id: string;
+    name: string;
+    phone?: string | null;
+    address?: string | null;
 }
 
 export default function ComprasPosPage() {
@@ -23,21 +33,43 @@ export default function ComprasPosPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [freightCost, setFreightCost] = useState<number>(0);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    // Estados para Proveedores y Alta Rápida
+    const [suppliersDb, setSuppliersDb] = useState<Supplier[]>([]);
+    const [supplierQuery, setSupplierQuery] = useState('');
+    const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+    const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
+
+    // Datos del comprobante
+    const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
+    const [docNumber, setDocNumber] = useState('');
+    const [docType, setDocType] = useState<'FACTURA' | 'REMITO' | 'PRESUPUESTO'>('FACTURA');
+
+    // Estados recuperados para Alta Rápida con Teléfono y Dirección
+    const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
+    const [newSupplierName, setNewSupplierName] = useState('');
+    const [newSupplierPhone, setNewSupplierPhone] = useState('');
+    const [newSupplierAddress, setNewSupplierAddress] = useState('');
+    const [supplierError, setSupplierError] = useState<string | null>(null);
+
     const searchInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        loadProducts();
+        loadInitialData();
         if (searchInputRef.current) {
             searchInputRef.current.focus();
         }
     }, []);
 
-    const loadProducts = async () => {
+    const loadInitialData = async () => {
         try {
-            const data = await getProducts();
-            setProducts(data as any);
+            const prodData = await getProducts();
+            setProducts(prodData as any);
+
+            const supData = await getSuppliersForSelect();
+            setSuppliersDb(supData as any);
         } catch (err) {
-            console.error('Error al cargar productos:', err);
+            console.error('Error al cargar datos iniciales:', err);
         }
     };
 
@@ -49,6 +81,40 @@ export default function ComprasPosPage() {
         );
     }, [products, searchQuery]);
 
+    const filteredSuppliers = useMemo(() => {
+        if (!supplierQuery.trim()) return [];
+        const q = supplierQuery.toLowerCase();
+        return suppliersDb
+            .filter(s => s.name.toLowerCase().includes(q))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [suppliersDb, supplierQuery]);
+
+    const handleSelectSupplier = (sup: Supplier) => {
+        setSelectedSupplier(sup);
+        setSupplierQuery(sup.name);
+        setIsSupplierDropdownOpen(false);
+        setIsCreatingSupplier(false);
+        setSupplierError(null);
+    };
+
+    const handleSaveSupplierQuick = () => {
+        setSupplierError(null);
+        if (!newSupplierName.trim()) {
+            setSupplierError('⚠️ El nombre del proveedor es obligatorio.');
+            return;
+        }
+
+        const supplierNameFormatted = newSupplierName.trim().toUpperCase();
+        setSelectedSupplier(null);
+        setSupplierQuery(supplierNameFormatted);
+        setIsCreatingSupplier(false);
+        setNewSupplierName('');
+        setNewSupplierPhone('');
+        setNewSupplierAddress('');
+        setSupplierError(null);
+        setIsSupplierDropdownOpen(false);
+    };
+
     const handleAddToCart = (product: ProductItem) => {
         setCart(prev => {
             const existing = prev.find(item => item.id === product.id);
@@ -57,7 +123,7 @@ export default function ComprasPosPage() {
                     item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
                 );
             }
-            return [...prev, { ...product, quantity: 1, unitCost: product.cost || 0 }];
+            return [...prev, { ...product, quantity: 1, unitCost: product.cost || 0, margin: product.margin || 100 }];
         });
         setSearchQuery('');
         setIsDropdownOpen(false);
@@ -92,59 +158,230 @@ export default function ComprasPosPage() {
     const totalFinal = subtotalAmount + freightCost;
     const totalUnits = cart.reduce((acc, item) => acc + item.quantity, 0);
 
+    const handleRegisterPurchase = async () => {
+        if (!supplierQuery.trim()) {
+            alert('⚠️ Debe seleccionar o ingresar un proveedor obligatorio.');
+            return;
+        }
+        if (cart.length === 0) {
+            alert('⚠️ El comprobante de compra está vacío. Agregue al menos un producto.');
+            return;
+        }
+
+        const payload: CreatePurchasePayload = {
+            supplierId: selectedSupplier ? selectedSupplier.id : undefined,
+            supplierName: !selectedSupplier ? supplierQuery.trim().toUpperCase() : undefined,
+            docType: docType,
+            docNumber: docNumber.trim() || undefined,
+            date: purchaseDate,
+            otherCostsTotal: freightCost,
+            items: cart.map(item => ({
+                productId: item.id,
+                code: item.code,
+                name: item.name,
+                categoryId: item.id,
+                quantity: item.quantity,
+                unitCost: item.unitCost,
+                margin: item.margin || 100
+            }))
+        };
+
+        try {
+            const res = await createPurchase(payload);
+
+            if (res.error) {
+                alert(`No se pudo registrar la compra: ${res.error}`);
+                return;
+            }
+
+            alert('¡Comprobante de compra registrado con éxito, stock actualizado y costos prorrateados!');
+
+            setCart([]);
+            setDocNumber('');
+            setFreightCost(0);
+            setSelectedSupplier(null);
+            setSupplierQuery('');
+            loadInitialData();
+
+        } catch (error: any) {
+            console.error('Error al registrar compra:', error);
+            alert(`No se pudo registrar la compra: ${error.message}`);
+        }
+    };
+
     return (
-
         <div className="flex flex-col h-[calc(100vh-4rem)] bg-stone-100 text-slate-800 overflow-hidden font-sans">
-
-            {/* CUERPO PRINCIPAL EN 3 COLUMNAS PARA COMPRAS */}
-
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 overflow-hidden">
 
-                {/* COLUMNA IZQUIERDA: ESTADOS Y PROVEEDOR */}
+                {/* COLUMNA IZQUIERDA: PROVEEDOR Y NAVEGACIÓN */}
                 <div className="lg:col-span-3 flex flex-col gap-3 shrink-0">
-
                     <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs">
-                        <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100 pb-1">
-                            Datos del Proveedor
-                        </h3>
-                        <div className="space-y-2">
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 mb-1">PROVEEDOR *</label>
-                                <input
-                                    type="text"
-                                    placeholder="BUSCAR O SELECCIONAR..."
-                                    className="w-full border border-slate-200 rounded p-1.5 uppercase font-medium bg-slate-50 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Nº COMPROBANTE</label>
-                                <input
-                                    type="text"
-                                    placeholder="0001-0000..."
-                                    className="w-full border border-slate-200 rounded p-1.5 uppercase font-medium bg-slate-50 outline-none font-mono"
-                                />
-                            </div>
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-1">
+                            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                Datos del Proveedor
+                            </h3>
+                            {selectedSupplier ? (
+                                <button
+                                    onClick={() => { setSelectedSupplier(null); setSupplierQuery(''); setIsCreatingSupplier(false); setSupplierError(null); }}
+                                    className="text-rose-600 font-bold hover:underline"
+                                >
+                                    Quitar
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => { setIsCreatingSupplier(!isCreatingSupplier); setSupplierError(null); }}
+                                    className="text-emerald-700 font-bold hover:underline"
+                                >
+                                    {isCreatingSupplier ? '✕ Cancelar' : '+ Alta Rápida'}
+                                </button>
+                            )}
                         </div>
+
+                        {/* FORMULARIO RESTAURADO DE ALTA RÁPIDA CON TELÉFONO Y DIRECCIÓN */}
+                        {isCreatingSupplier ? (
+                            <div className="p-2.5 bg-slate-50 border border-emerald-300 rounded-lg space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">Nuevo Proveedor</span>
+                                    <button onClick={() => { setIsCreatingSupplier(false); setSupplierError(null); }} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                                </div>
+
+                                {supplierError && (
+                                    <div className="p-2 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] rounded-md font-medium">
+                                        {supplierError}
+                                    </div>
+                                )}
+
+                                <input
+                                    type="text"
+                                    placeholder="RAZÓN SOCIAL / NOMBRE *"
+                                    value={newSupplierName}
+                                    onChange={(e) => setNewSupplierName(e.target.value)}
+                                    className="w-full border border-slate-200 rounded p-1.5 uppercase font-medium bg-white outline-none text-xs"
+                                />
+
+                                <input
+                                    type="text"
+                                    placeholder="TELÉFONO"
+                                    value={newSupplierPhone}
+                                    onChange={(e) => setNewSupplierPhone(e.target.value)}
+                                    className="w-full border border-slate-200 rounded p-1.5 font-mono uppercase bg-white outline-none text-xs"
+                                />
+
+                                <input
+                                    type="text"
+                                    placeholder="DIRECCIÓN"
+                                    value={newSupplierAddress}
+                                    onChange={(e) => setNewSupplierAddress(e.target.value)}
+                                    className="w-full border border-slate-200 rounded p-1.5 uppercase bg-white outline-none text-xs"
+                                />
+
+                                <button
+                                    onClick={handleSaveSupplierQuick}
+                                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-xs uppercase shadow-xs transition-colors text-center cursor-pointer flex items-center justify-center gap-1.5"
+                                >
+                                    💾 Listo
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <div className="relative">
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">PROVEEDOR *</label>
+                                    <input
+                                        type="text"
+                                        placeholder="BUSCAR PROVEEDOR..."
+                                        value={supplierQuery}
+                                        onChange={(e) => {
+                                            setSupplierQuery(e.target.value);
+                                            setIsSupplierDropdownOpen(true);
+                                            setSelectedSupplier(null);
+                                        }}
+                                        onFocus={() => setIsSupplierDropdownOpen(true)}
+                                        className="w-full border border-slate-200 rounded p-1.5 uppercase font-medium bg-slate-50 outline-none"
+                                    />
+
+                                    {isSupplierDropdownOpen && supplierQuery.trim() && (
+                                        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-slate-100">
+                                            {filteredSuppliers.length > 0 ? (
+                                                filteredSuppliers.map(s => (
+                                                    <div
+                                                        key={s.id}
+                                                        onMouseDown={() => handleSelectSupplier(s)}
+                                                        className="p-2.5 hover:bg-emerald-50 cursor-pointer text-xs uppercase font-bold text-slate-800 transition-colors flex justify-between items-center"
+                                                    >
+                                                        <span>{s.name}</span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="p-2 text-center text-[10px] text-slate-400 italic">
+                                                    Se registrará como: <strong className="text-emerald-700 uppercase">{supplierQuery}</strong>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">FECHA COMPROBANTE</label>
+                                    <input
+                                        type="date"
+                                        value={purchaseDate}
+                                        onChange={(e) => setPurchaseDate(e.target.value)}
+                                        className="w-full border border-slate-200 rounded p-1.5 font-medium bg-slate-50 outline-none text-xs"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">TIPO DOC</label>
+                                        <select
+                                            value={docType}
+                                            onChange={(e: any) => setDocType(e.target.value)}
+                                            className="w-full border border-slate-200 rounded p-1.5 font-bold uppercase bg-slate-50 outline-none text-xs"
+                                        >
+                                            <option value="FACTURA">FACTURA</option>
+                                            <option value="REMITO">REMITO</option>
+                                            <option value="PRESUPUESTO">PRESUPUESTO</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Nº COMPROBANTE</label>
+                                        <input
+                                            type="text"
+                                            placeholder="0001-0000..."
+                                            value={docNumber}
+                                            onChange={(e) => setDocNumber(e.target.value)}
+                                            className="w-full border border-slate-200 rounded p-1.5 uppercase font-medium bg-slate-50 outline-none font-mono text-xs"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs flex-1">
-                        <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100 pb-1">
-                            Opciones de Compras
-                        </h3>
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs flex-1 flex flex-col justify-between">
+                        <div>
+                            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100 pb-1 mb-2">
+                                Opciones y Reportes
+                            </h3>
+                            <Link
+                                href="/compras/historial"
+                                className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold uppercase transition-colors text-center flex items-center justify-center gap-1.5 shadow-sm"
+                            >
+                                📜 Historial de Compras
+                            </Link>
+                        </div>
+
                         <button
                             onClick={() => setCart([])}
-                            className="w-full py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-xs font-bold transition-colors text-center"
+                            className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-xs font-bold transition-colors text-center cursor-pointer"
                         >
                             🗑️ Limpiar Comprobante
                         </button>
                     </div>
-
                 </div>
 
-                {/* COLUMNA CENTRAL: BUSCADOR DE PRODUCTOS Y GRILLA */}
+                {/* COLUMNA CENTRAL: PRODUCTOS */}
                 <div className="lg:col-span-6 flex flex-col gap-3 h-full overflow-hidden">
-
-                    {/* BUSCADOR GIGANTE DE PRODUCTOS PARA COMPRA */}
                     <div className="relative bg-white p-3 rounded-xl border border-slate-200 shadow-sm shrink-0">
                         <div className="flex items-center gap-2">
                             <input
@@ -168,30 +405,33 @@ export default function ComprasPosPage() {
                             </button>
                         </div>
 
-                        {/* DESPLEGABLE PREDICTIVO */}
                         {isDropdownOpen && filteredProducts.length > 0 && (
                             <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-56 overflow-y-auto z-50 divide-y divide-slate-100">
-                                {filteredProducts.map(p => (
-                                    <div
-                                        key={p.id}
-                                        onClick={() => handleAddToCart(p)}
-                                        className="p-2.5 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs uppercase"
-                                    >
-                                        <div>
-                                            <span className="font-mono font-bold text-slate-500 mr-2">[{p.code}]</span>
-                                            <span className="font-bold text-slate-800">{p.name}</span>
+                                {filteredProducts.map(p => {
+                                    const sinStock = p.stock <= 0;
+                                    return (
+                                        <div
+                                            key={p.id}
+                                            onClick={() => handleAddToCart(p)}
+                                            className={`p-2.5 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs uppercase ${sinStock ? 'bg-rose-50/40 hover:bg-rose-50' : ''}`}
+                                        >
+                                            <div>
+                                                <span className="font-mono font-bold text-slate-500 mr-2">[{p.code}]</span>
+                                                <span className="font-bold text-slate-800">{p.name}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className={`font-bold ${sinStock ? 'text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded text-[10px]' : 'text-slate-500'}`}>
+                                                    Stock Actual: {p.stock} u.
+                                                </span>
+                                                <span className="font-mono font-bold text-emerald-700 text-sm">Costo: $ {p.cost.toLocaleString()}</span>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-slate-500">Stock Actual: {p.stock} u.</span>
-                                            <span className="font-mono font-bold text-emerald-700 text-sm">Costo: $ {p.cost.toLocaleString()}</span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
 
-                    {/* GRILLA DE ÍTEMS DE COMPRA */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-2xs flex-1 flex flex-col overflow-hidden">
                         <div className="overflow-x-auto flex-1">
                             <table className="w-full text-left text-xs border-collapse">
@@ -242,7 +482,7 @@ export default function ComprasPosPage() {
                                                 <td className="p-2.5 text-center">
                                                     <button
                                                         onClick={() => handleRemoveItem(item.id)}
-                                                        className="text-slate-400 hover:text-rose-600 font-bold px-1.5 py-0.5 rounded"
+                                                        className="text-slate-400 hover:text-rose-600 font-bold px-1.5 py-0.5 rounded cursor-pointer"
                                                         title="Eliminar"
                                                     >
                                                         ✕
@@ -255,13 +495,10 @@ export default function ComprasPosPage() {
                             </table>
                         </div>
                     </div>
-
                 </div>
 
-                {/* COLUMNA DERECHA: TOTALES, FLETES Y REGISTRO */}
+                {/* COLUMNA DERECHA: TOTALES Y REGISTRO */}
                 <div className="lg:col-span-3 flex flex-col gap-3 shrink-0">
-
-                    {/* COSTOS Y FLETES */}
                     <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs">
                         <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100 pb-1">
                             Prorrata y Gastos
@@ -277,7 +514,6 @@ export default function ComprasPosPage() {
                         </div>
                     </div>
 
-                    {/* TARJETA DE TOTAL COMPROBANTE */}
                     <div className="bg-slate-900 text-white p-4 rounded-xl shadow-md space-y-1">
                         <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Total Comprobante:</span>
                         <div className="text-3xl font-black font-mono text-emerald-400">
@@ -288,11 +524,12 @@ export default function ComprasPosPage() {
                         </p>
                     </div>
 
-                    {/* BOTÓN DE ACCIÓN FINAL */}
-                    <button className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs uppercase shadow-sm transition-colors">
+                    <button
+                        onClick={handleRegisterPurchase}
+                        className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs uppercase shadow-sm transition-colors cursor-pointer"
+                    >
                         💾 Registrar Comprobante
                     </button>
-
                 </div>
 
             </div>

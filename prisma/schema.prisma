@@ -77,7 +77,7 @@ model Product {
   trackStock  Boolean        @default(true)
   stock       Int            @default(0)
   minStock    Int            @default(2) 
-  destacado   Boolean        @default(false) // <-- CAMPO NUEVO AÑADIDO
+  destacado   Boolean        @default(false)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @default(now()) @updatedAt
   
@@ -144,17 +144,25 @@ model PurchaseItem {
 // CLIENTES
 // -------------------------------------------------------------
 model Customer {
-  id             String   @id @default(cuid())
-  name           String?
-  email          String   @unique
-  password_hash  String
-  phone          String?
-  address        String?
-  dni_cuit       String?
-  gender         String?
-  image_url      String?  @db.LongText   // <-- Asegúrate de que tenga @db.LongText aquí
-  role           String   @default("ADMIN")
-  // ... resto de tus campos
+  id                 String   @id @default(cuid())
+  name               String?
+  email              String   @unique
+  password_hash      String
+  phone              String?
+  address            String?
+  dni_cuit           String?
+  gender             String?  @default("neutral")
+  image_url          String?  @db.LongText
+  email_verified     Int      @default(0)
+  verification_token String?
+  origin             String   @default("tienda")
+  created_at         DateTime @default(now())
+  role               String   @default("cliente_web")
+
+  // Relaciones con otras tablas del sistema
+  sales              Sale[]
+  payments           Payment[]
+  customerPromotions CustomerPromotion[]
 }
 
 // -------------------------------------------------------------
@@ -173,12 +181,12 @@ model CashMovement {
 // -------------------------------------------------------------
 model CashClosure {
   id            String   @id @default(cuid())
-  date          String   @unique // Formato 'YYYY-MM-DD' para identificar el día exacto
-  totalSales    Float    // Total vendido en el día
-  netCash       Float    // Efectivo neto real en caja al cerrar
+  date          String   @unique
+  totalSales    Float    
+  netCash       Float    
   closedAt      DateTime @default(now())
-  closedBy      String?  // Usuario o cajero que realizó el cierre
-  notes         String?  // Observaciones del arqueo físico vs sistema
+  closedBy      String?  
+  notes         String?  
 }
 
 // -------------------------------------------------------------
@@ -237,6 +245,9 @@ model Sale {
 
   items            SaleItem[]
   payments         Payment[]     
+  
+  // Relación con los reclamos
+  claims        Claim[]
 }
 
 // -------------------------------------------------------------
@@ -283,7 +294,7 @@ model Promotion {
   stock              Int                 
   desde              String?
   hasta              String?
-  categoria          String?             // <--- ¡Faltaba agregar esta línea!
+  categoria          String?             
   customerPromotions CustomerPromotion[]
   productos          Product[]           @relation("PromotionProducts")
   createdAt          DateTime            @default(now())
@@ -303,9 +314,10 @@ model CustomerPromotion {
 
 // -------------------------------------------------------------
 // BANNERS Y CAMPAÑAS
-// -------------------------------------------------------------model Banner {
+// -------------------------------------------------------------
+model Banner {
   id        Int      @id @default(autoincrement())
-  seccion   String   @default("hero") // <-- Este campo debe estar aquí
+  seccion   String   @default("hero") 
   titulo    String
   subtitulo String?
   imagenUrl String   @db.LongText
@@ -350,9 +362,19 @@ model Resena {
   image_url    String?  @db.LongText  
   calificacion Int?
   activo       Boolean  @default(true)
-  respuesta    String?  @db.Text // 👈 Nuevo campo para la respuesta oficial de la tienda
+  respuesta    String?  @db.Text 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@map("resenas") 
+}
+model Claim {
+  id          String    @id @default(cuid())
+  saleId      String
+  sale        Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  reason      String    // Motivo del reclamo
+  resolution  String?   // Nota de resolución
+  status      String    @default("ABIERTO") // ABIERTO / RESUELTO / REGISTRADO
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
 }

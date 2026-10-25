@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
+import Link from 'next/link';
 import { getClients, createClient, updateClient, deleteClient } from '@/actions/client-actions';
-import { Pencil, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, Search, UserPlus, ShieldCheck, Users } from 'lucide-react';
+import { Pencil, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, Search, UserPlus, ShieldCheck, Users, FileText } from 'lucide-react';
 
 export default function ClientesYPersonalPage() {
-    // Estado para alternar entre pestañas: 'clientes' o 'personal'
     const [activeTab, setActiveTab] = useState<'clientes' | 'personal'>('clientes');
 
     const [records, setRecords] = useState<any[]>([]);
@@ -13,7 +13,7 @@ export default function ClientesYPersonalPage() {
     const [roleFilter, setRoleFilter] = useState('todos');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const itemsPerPage = 5; // Fijado en 5 para evitar que se vaya muy abajo y mostrar el paginador prolijo
 
     const [isPending, startTransition] = useTransition();
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -21,7 +21,7 @@ export default function ClientesYPersonalPage() {
     // Campos del formulario
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState(''); // Específico para personal interno
+    const [password, setPassword] = useState('');
     const [phone, setPhone] = useState('');
     const [dniCuit, setDniCuit] = useState('');
     const [role, setRole] = useState('cliente_presencial');
@@ -35,7 +35,6 @@ export default function ClientesYPersonalPage() {
     const [success, setSuccess] = useState('');
 
     const loadData = async () => {
-        // Si estamos en la pestaña de clientes, filtramos roles de clientes. Si estamos en personal, roles internos.
         const data = await getClients(searchTerm, sortOrder, roleFilter);
         setRecords(data);
     };
@@ -50,8 +49,8 @@ export default function ClientesYPersonalPage() {
         setError('');
         setSuccess('');
         setRoleFilter('todos');
-        // Valores por defecto según la pestaña
         setRole(tab === 'clientes' ? 'cliente_presencial' : 'CAJERO');
+        setCurrentPage(1);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -185,13 +184,12 @@ export default function ClientesYPersonalPage() {
                         </div>
                     </div>
 
-                    {/* Botones de Pestañas */}
                     <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1">
                         <button
                             onClick={() => handleTabChange('clientes')}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === 'clientes'
-                                    ? 'bg-white text-emerald-700 shadow-xs'
-                                    : 'text-slate-600 hover:text-slate-900'
+                                ? 'bg-white text-emerald-700 shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
                                 }`}
                         >
                             <Users className="w-3.5 h-3.5" /> Clientes
@@ -199,8 +197,8 @@ export default function ClientesYPersonalPage() {
                         <button
                             onClick={() => handleTabChange('personal')}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === 'personal'
-                                    ? 'bg-white text-emerald-700 shadow-xs'
-                                    : 'text-slate-600 hover:text-slate-900'
+                                ? 'bg-white text-emerald-700 shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
                                 }`}
                         >
                             <ShieldCheck className="w-3.5 h-3.5" /> Personal Interno
@@ -354,133 +352,145 @@ export default function ClientesYPersonalPage() {
                         </form>
                     </div>
 
-                    {/* Listado y Filtros (Derecha) */}
-                    <div className="lg:col-span-8 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-                        <div className="flex flex-col sm:flex-row justify-between items-center gap-2 border-b border-slate-100 pb-2">
-                            <div className="flex items-center gap-2">
-                                <h3 className="text-xs font-extrabold text-slate-900 uppercase">
-                                    {activeTab === 'clientes' ? 'Listado de Clientes' : 'Equipo de Trabajo'}
-                                </h3>
-                                <select
-                                    value={roleFilter}
-                                    onChange={(e) => setRoleFilter(e.target.value)}
-                                    className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-700 focus:outline-none cursor-pointer"
-                                >
-                                    <option value="todos">Todos</option>
-                                    {activeTab === 'clientes' ? (
-                                        <>
-                                            <option value="cliente_presencial">🌿 Presenciales</option>
-                                            <option value="cliente_web">🌐 Web</option>
-                                            <option value="cliente_pos">⚡ POS</option>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <option value="ADMIN">👑 Administradores</option>
-                                            <option value="CAJERO">⚡ Cajeros</option>
-                                            <option value="OPERADOR">💻 Operadores</option>
-                                            <option value="DEPOSITO">📦 Depósito</option>
-                                        </>
-                                    )}
-                                </select>
+                    {/* Listado y Filtros (Derecha) - Altura controlada y Flex para fijar paginador */}
+                    <div className="lg:col-span-8 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[420px]">
+                        <div className="space-y-2">
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-2 border-b border-slate-100 pb-2">
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-xs font-extrabold text-slate-900 uppercase">
+                                        {activeTab === 'clientes' ? 'Listado de Clientes' : 'Equipo de Trabajo'}
+                                    </h3>
+                                    <select
+                                        value={roleFilter}
+                                        onChange={(e) => setRoleFilter(e.target.value)}
+                                        className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-700 focus:outline-none cursor-pointer"
+                                    >
+                                        <option value="todos">Todos</option>
+                                        {activeTab === 'clientes' ? (
+                                            <>
+                                                <option value="cliente_presencial">🌿 Presenciales</option>
+                                                <option value="cliente_web">🌐 Web</option>
+                                                <option value="cliente_pos">⚡ POS</option>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <option value="ADMIN">👑 Administradores</option>
+                                                <option value="CAJERO">⚡ Cajeros</option>
+                                                <option value="OPERADOR">💻 Operadores</option>
+                                                <option value="DEPOSITO">📦 Depósito</option>
+                                            </>
+                                        )}
+                                    </select>
+                                </div>
+
+                                <div className="relative w-full sm:w-60">
+                                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar por nombre, mail..."
+                                        value={searchTerm}
+                                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                                        className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                                    />
+                                </div>
                             </div>
 
-                            <div className="relative w-full sm:w-60">
-                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                                <input
-                                    type="text"
-                                    placeholder="Buscar por nombre, mail..."
-                                    value={searchTerm}
-                                    onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="overflow-x-auto min-h-[300px]">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                        <th className="py-1.5 px-2 cursor-pointer hover:text-slate-700" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>
-                                            <div className="flex items-center gap-1">
-                                                Nombre / Correo <ArrowUpDown className="w-3 h-3" />
-                                            </div>
-                                        </th>
-                                        <th className="py-1.5 px-2">Rol / Perfil</th>
-                                        <th className="py-1.5 px-2">{activeTab === 'clientes' ? 'Teléfono / DNI' : 'Estado'}</th>
-                                        <th className="py-1.5 px-2">{activeTab === 'clientes' ? 'Dirección' : 'Acceso'}</th>
-                                        <th className="py-1.5 px-2 text-center">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 text-xs">
-                                    {paginatedRecords.length > 0 ? (
-                                        paginatedRecords.map((item) => (
-                                            <tr key={item.id} className="hover:bg-slate-50/50 transition">
-                                                <td className="py-2 px-2">
-                                                    <div className="font-bold text-slate-800">{item.name}</div>
-                                                    <div className="text-[10px] text-slate-400">{item.email}</div>
-                                                </td>
-                                                <td className="py-2 px-2">
-                                                    {getBadge(item.role)}
-                                                </td>
-                                                <td className="py-2 px-2 text-slate-600 text-[11px]">
-                                                    {activeTab === 'clientes' ? (
-                                                        <>
-                                                            <div>{item.phone || '-'}</div>
-                                                            <div className="text-[9px] text-slate-400 font-mono">{item.dni_cuit}</div>
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-emerald-600 font-bold text-[10px]">Activo en Sistema</span>
-                                                    )}
-                                                </td>
-                                                <td className="py-2 px-2 text-slate-600 truncate max-w-xs">
-                                                    {activeTab === 'clientes' ? (item.address || '-') : <span className="font-mono text-[10px] text-slate-400">Credenciales OK</span>}
-                                                </td>
-                                                <td className="py-2 px-2 text-center">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <button
-                                                            onClick={() => handleEdit(item)}
-                                                            className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
-                                                            title="Editar"
-                                                        >
-                                                            <Pencil className="w-3.5 h-3.5" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDelete(item.id)}
-                                                            className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                                            title="Eliminar"
-                                                        >
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </div>
+                            {/* TABLA CON ALTURA FIJA Y CONTROL DE PÁGINA (5 registros) */}
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                            <th className="py-2 px-2 cursor-pointer hover:text-slate-700 w-1/3" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>
+                                                <div className="flex items-center gap-1">
+                                                    Nombre / Correo <ArrowUpDown className="w-3 h-3" />
+                                                </div>
+                                            </th>
+                                            <th className="py-2 px-2 w-28">Rol / Perfil</th>
+                                            <th className="py-2 px-2 w-32">{activeTab === 'clientes' ? 'Teléfono / DNI' : 'Estado'}</th>
+                                            <th className="py-2 px-2">{activeTab === 'clientes' ? 'Dirección' : 'Acceso'}</th>
+                                            <th className="py-2 px-2 text-center w-24">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-xs">
+                                        {paginatedRecords.length > 0 ? (
+                                            paginatedRecords.map((item) => (
+                                                <tr key={item.id} className="hover:bg-slate-50/50 transition">
+                                                    <td className="py-2.5 px-2">
+                                                        <div className="font-bold text-slate-800">{item.name}</div>
+                                                        <div className="text-[10px] text-slate-400">{item.email}</div>
+                                                    </td>
+                                                    <td className="py-2 px-2">
+                                                        {getBadge(item.role)}
+                                                    </td>
+                                                    <td className="py-2.5 px-2 text-slate-600 text-[11px]">
+                                                        {activeTab === 'clientes' ? (
+                                                            <>
+                                                                <div>{item.phone || '-'}</div>
+                                                                <div className="text-[9px] text-slate-400 font-mono">{item.dni_cuit}</div>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-emerald-600 font-bold text-[10px]">Activo en Sistema</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2.5 px-2 text-slate-600 text-[11px] truncate max-w-[150px]">
+                                                        {activeTab === 'clientes' ? (item.address || 'S/D') : 'Personal Interno'}
+                                                    </td>
+                                                    <td className="py-2.5 px-2 text-center">
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            {activeTab === 'clientes' && (
+                                                                <Link
+                                                                    href={`/clientes/${item.id}`}
+                                                                    className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                                                                    title="Ver Estado de Cuenta y Movimientos"
+                                                                >
+                                                                    <FileText className="w-3.5 h-3.5" />
+                                                                </Link>
+                                                            )}
+                                                            <button
+                                                                onClick={() => handleEdit(item)}
+                                                                className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                                                                title="Editar"
+                                                            >
+                                                                <Pencil className="w-3.5 h-3.5" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(item.id)}
+                                                                className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                                                title="Eliminar"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={5} className="text-center py-12 text-slate-400 text-xs italic">
+                                                    No se encontraron registros con este filtro.
                                                 </td>
                                             </tr>
-                                        ))
-                                    ) : (
-                                        <tr>
-                                            <td colSpan={5} className="text-center py-8 text-slate-400 text-xs">
-                                                No se encontraron registros con este filtro.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
-                        {/* Paginador */}
-                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-500">
-                            <span>Página {currentPage} de {totalPages || 1}</span>
+                        {/* Paginador Inferior Anclado */}
+                        <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs text-slate-500">
+                            <span>Mostrando página <strong>{currentPage}</strong> de <strong>{totalPages || 1}</strong></span>
                             <div className="flex items-center gap-1">
                                 <button
                                     onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                                     disabled={currentPage === 1}
-                                    className="p-1 border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50 transition cursor-pointer"
+                                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50 transition cursor-pointer"
                                 >
                                     <ChevronLeft className="w-4 h-4" />
                                 </button>
                                 <button
                                     onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
                                     disabled={currentPage >= totalPages}
-                                    className="p-1 border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50 transition cursor-pointer"
+                                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50 transition cursor-pointer"
                                 >
                                     <ChevronRight className="w-4 h-4" />
                                 </button>

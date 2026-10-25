@@ -108,12 +108,17 @@ function OperacionesContent() {
                 const data = await res.json();
                 setOrders(data);
 
-                // Si viene un ID específico o un claimId, ajustamos la fecha y solapa automáticamente
+                // Si viene un ID específico o un claimId, ajustamos la solapa automáticamente 
+                // PERO respetamos la fecha que ya vino por parámetro en la URL si existe
                 if ((orderIdParam || claimIdParam) && data.length > 0) {
                     const foundOrder = data[0];
-                    const orderDate = foundOrder.createdAt.split('T')[0];
-                    setDateFrom(orderDate);
-                    setDateTo(orderDate);
+
+                    // Solo asignamos la fecha de la orden si NO vino un dateParam en la URL
+                    if (!dateParam) {
+                        const orderDate = foundOrder.createdAt.split('T')[0];
+                        setDateFrom(orderDate);
+                        setDateTo(orderDate);
+                    }
 
                     if (!tabParam) {
                         if (claimIdParam || foundOrder.status === 'RECLAMO' || (foundOrder.notes && foundOrder.notes.includes('RECLAMO'))) {
@@ -218,7 +223,7 @@ function OperacionesContent() {
     // Filtrados para las 4 solapas
     const pendientesEntrega = useMemo(() => orders.filter(o => o.status === 'REGISTRADO'), [orders]);
     const cuentasACobrar = useMemo(() => orders.filter(o => o.pendingBalance > 0), [orders]);
-    const ventasFinalizadas = useMemo(() => orders.filter(o => o.status === 'ENTREGADO' && o.pendingBalance === 0), [orders]);
+    const ventasFinalizadas = useMemo(() => orders.filter(o => (o.status === 'ENTREGADO' || o.status === 'ATENDIDO') && o.pendingBalance === 0), [orders]);
     const reclamosIncidencias = useMemo(() => orders.filter(o =>
         o.status === 'RECLAMO' || (o.notes && (o.notes.includes('RECLAMO') || o.notes.includes('RESUELTO')))
     ), [orders]);

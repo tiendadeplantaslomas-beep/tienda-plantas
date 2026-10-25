@@ -196,7 +196,20 @@ export default function DashboardPage() {
             pastelBg: 'bg-cyan-50/90 hover:bg-cyan-100/80 border-cyan-200 text-cyan-900',
             badgeColor: 'text-cyan-700',
             iconColor: 'text-cyan-600'
-        }
+        },
+        {
+            title: 'Módulo de Operaciones',
+            description: 'Cuentas a cobrar, entregas y ventas.',
+            href: '/operaciones',
+            icon: Truck,
+            category: 'Logística & Caja',
+            allowedRoles: ['ADMIN', 'CAJERO'],
+            pastelBg: 'bg-emerald-50/90 hover:bg-emerald-100/80 border-emerald-200 text-emerald-900',
+            badgeColor: 'text-emerald-700',
+            iconColor: 'text-emerald-600'
+        },
+
+
     ];
 
     if (status === 'loading') {

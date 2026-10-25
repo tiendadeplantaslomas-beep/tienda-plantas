@@ -31,6 +31,7 @@ interface Order {
     createdAt: string;
     client: string;
     clientEmail: string;
+    clientPhone?: string;
     total: number;
     paidAmount?: number;
     pendingBalance?: number;
@@ -80,11 +81,11 @@ export default function VentasPosPage() {
     const [newClientPhone, setNewClientPhone] = useState('');
     const [newClientAddress, setNewClientAddress] = useState('');
     const [newClientEmail, setNewClientEmail] = useState('');
+    const [clientError, setClientError] = useState<string | null>(null);
 
     const [isShipping, setIsShipping] = useState(false);
     const [shippingAddress, setShippingAddress] = useState('');
 
-    // Corrección: Obtener la fecha actual en hora local (evita desfases de UTC al recargar)
     const todayStr = useMemo(() => {
         const d = new Date();
         const year = d.getFullYear();
@@ -108,13 +109,21 @@ export default function VentasPosPage() {
     const [montoAplicarInput, setMontoAplicarInput] = useState<number>(0);
 
     const [targetEmail, setTargetEmail] = useState('');
-    const [isSendingEmail, setIsSendingEmail] = useState(false);
 
     const searchInputRef = useRef<HTMLInputElement>(null);
     const addressInputRef = useRef<HTMLInputElement>(null);
     const newClientAddressInputRef = useRef<HTMLInputElement>(null);
 
-    // Cargar datos iniciales y sincronizar órdenes según el rango de fechas seleccionado
+    // Obtener la URL base dinámica para enlaces públicos de comprobantes (Localtunnel / Producción)
+    const getBaseUrl = () => {
+        if (typeof window !== 'undefined') {
+            const envUrl = process.env.NEXT_PUBLIC_APP_URL;
+            if (envUrl) return envUrl;
+            return window.location.origin;
+        }
+        return '';
+    };
+
     useEffect(() => {
         const loadInitialData = async () => {
             try {
@@ -133,7 +142,6 @@ export default function VentasPosPage() {
                     setSettings(settingsData);
                 }
 
-                // Cargar operaciones desde la BD filtradas por fecha
                 const resOrders = await fetch(`/api/ventas?from=${dateFrom}&to=${dateTo}`);
                 if (resOrders.ok) {
                     const ordersData = await resOrders.json();
@@ -141,7 +149,8 @@ export default function VentasPosPage() {
                         id: s.id,
                         createdAt: s.createdAt || new Date().toISOString(),
                         client: s.customerName || s.client || 'CLIENTE MOSTRADOR',
-                        clientEmail: s.customerEmail || s.clientEmail || 'sin_email@pos.com',
+                        clientEmail: s.customerEmail || s.clientEmail || s.customer?.email || 'sin_email@pos.com',
+                        clientPhone: s.customerPhone || s.clientPhone || s.customer?.phone || '',
                         total: Number(s.total || 0),
                         paidAmount: Number(s.paidAmount || 0),
                         pendingBalance: Number(s.pendingBalance !== undefined ? s.pendingBalance : (s.total - (s.paidAmount || 0))),
@@ -268,6 +277,7 @@ export default function VentasPosPage() {
         setIsShipping(false);
         setShippingAddress('');
         setIsCreatingClient(false);
+        setClientError(null);
         setIsOrderActive(true);
 
         setTimeout(() => {
@@ -285,6 +295,7 @@ export default function VentasPosPage() {
         setIsShipping(false);
         setShippingAddress('');
         setIsCreatingClient(false);
+        setClientError(null);
     };
 
     const handleStartEditOrder = (order: Order) => {
@@ -307,6 +318,7 @@ export default function VentasPosPage() {
         setClientQuery(client.name);
         setIsClientDropdownOpen(false);
         setIsCreatingClient(false);
+        setClientError(null);
         if (client.address) {
             setShippingAddress(client.address);
             setIsShipping(true);
@@ -314,6 +326,13 @@ export default function VentasPosPage() {
     };
 
     const handleSaveClientToDatabase = async () => {
+        setClientError(null);
+
+        if (!newClientEmail || newClientEmail.trim() === '') {
+            setClientError('⚠️ El correo electrónico es obligatorio para enviar comprobantes, facturas y remitos.');
+            return;
+        }
+
         const clientData = {
             name: newClientName.trim().toUpperCase(),
             phone: newClientPhone.trim(),
@@ -348,12 +367,13 @@ export default function VentasPosPage() {
             setNewClientPhone('');
             setNewClientAddress('');
             setNewClientEmail('');
+            setClientError(null);
             setIsClientDropdownOpen(false);
 
             alert('¡Cliente registrado exitosamente!');
         } catch (error: any) {
             console.error('Error detallado al guardar cliente:', error);
-            alert(`No se pudo guardar el cliente: ${error.message}`);
+            setClientError(`No se pudo guardar el cliente: ${error.message}`);
         }
     };
 
@@ -433,6 +453,7 @@ export default function VentasPosPage() {
                 createdAt: new Date().toISOString(),
                 client: clientNameFinal,
                 clientEmail: clientEmailFinal,
+                clientPhone: selectedClient?.phone || '',
                 total: totalAmount,
                 paidAmount: 0,
                 pendingBalance: totalAmount,
@@ -526,35 +547,55 @@ export default function VentasPosPage() {
         }
     };
 
-    const handleSendEmailFromPreview = async () => {
-        if (!previewModal) return;
-        if (!targetEmail.trim()) {
-            alert('Por favor ingrese un e-mail de destino.');
+    // Enviar comprobante oficial por E-mail (Gmail Web) sin alertas simulación
+    const handleSendEmailFromPreview = (order: Order) => {
+        let emailDestino = targetEmail || order.clientEmail;
+
+        if (!emailDestino || emailDestino.trim() === '' || emailDestino.includes('sin_email')) {
+            const emailManual = prompt('⚠️ El cliente no tiene e-mail en este registro. Ingresá la casilla de correo:');
+            if (!emailManual) return;
+            emailDestino = emailManual;
+        }
+
+        const asunto = `Comprobante de Compra #${order.id.slice(-6)} - Tienda de Plantas`;
+        const urlComprobante = `${getBaseUrl()}/api/ventas/${order.id}/pdf`;
+        const cuerpo =
+            `Hola ${order.client},\n\n` +
+            `¡Muchas gracias por tu compra en Tienda de Plantas!\n\n` +
+            `Te compartimos el enlace oficial para consultar y descargar tu comprobante de pago en formato PDF:\n` +
+            `${urlComprobante}\n\n` +
+            `Detalles de nuestro local:\n` +
+            `Pedro Mascagni 316, Lomas de Zamora\n` +
+            `Tel: +54 11 40782378\n\n` +
+            `Atentamente,\n` +
+            `Equipo de Tienda de Plantas`;
+
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailDestino)}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+        window.open(gmailUrl, '_blank');
+    };
+
+    // Enviar comprobante oficial por WhatsApp (Lógica directa y limpia wa.me)
+    const handleSendWhatsAppFromPreview = (order: Order) => {
+        let telefono = order.clientPhone;
+
+        if (!telefono || telefono.trim() === '') {
+            const numManual = prompt('⚠️ El cliente no tiene teléfono asignado. Ingresá su WhatsApp (ej: 1140782378):');
+            if (!numManual) return;
+            telefono = numManual;
+        }
+
+        let numLimpio = telefono.replace(/\D/g, '');
+        if (!numLimpio) {
+            alert('⚠️ Número no válido.');
             return;
         }
 
-        setIsSendingEmail(true);
+        const numFinal = numLimpio.startsWith('54') ? numLimpio : `549${numLimpio}`;
+        const urlComprobante = `${getBaseUrl()}/api/ventas/${order.id}/pdf`;
+        const texto = `Hola ${order.client}! Te enviamos el comprobante de tu compra #${order.id.slice(-6)} en Tienda de Plantas.\n\nPuedes ver y descargar tu recibo oficial en el siguiente enlace:\n${urlComprobante}\n\nPedro Mascagni 316, Lomas de Zamora. ¡Muchas gracias!`;
 
-        try {
-            const response = await fetch(`/api/orders/${previewModal.order.id}/send-email`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: previewModal.mode,
-                    email: targetEmail.trim()
-                })
-            });
-
-            if (response.ok) {
-                alert(`¡Documento enviado exitosamente a ${targetEmail}!`);
-            } else {
-                alert(`[Modo Simulación] Documento enviado a ${targetEmail}`);
-            }
-        } catch (error) {
-            alert(`[Modo Simulación] Documento enviado a ${targetEmail}`);
-        } finally {
-            setIsSendingEmail(false);
-        }
+        const waUrl = `https://wa.me/${numFinal}?text=${encodeURIComponent(texto)}`;
+        window.open(waUrl, '_blank');
     };
 
     const handleGenerateInvoiceFromPreview = () => {
@@ -796,24 +837,33 @@ export default function VentasPosPage() {
                             </button>
                         </div>
 
+                        {/* DESPLEGABLE CON ADVERTENCIA EN ROJO PARA PRODUCTOS SIN STOCK */}
                         {isDropdownOpen && filteredProducts.length > 0 && isOrderActive && (
                             <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-56 overflow-y-auto z-50 divide-y divide-slate-100">
-                                {filteredProducts.map(p => (
-                                    <div
-                                        key={p.id}
-                                        onClick={() => handleAddToCart(p)}
-                                        className="p-2.5 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs uppercase"
-                                    >
-                                        <div>
-                                            <span className="font-mono font-bold text-slate-500 mr-2">[{p.code}]</span>
-                                            <span className="font-bold text-slate-800">{p.name}</span>
+                                {filteredProducts.map(p => {
+                                    const sinStock = p.stock <= 0;
+                                    return (
+                                        <div
+                                            key={p.id}
+                                            onClick={() => handleAddToCart(p)}
+                                            className={`p-2.5 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs uppercase ${sinStock ? 'bg-rose-50/40 hover:bg-rose-50' : ''}`}
+                                        >
+                                            <div>
+                                                <span className="font-mono font-bold text-slate-500 mr-2">[{p.code}]</span>
+                                                <span className={`font-bold ${sinStock ? 'text-rose-900' : 'text-slate-800'}`}>{p.name}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className={`font-bold uppercase ${sinStock
+                                                    ? 'text-rose-600 bg-rose-100 border border-rose-300 px-1.5 py-0.5 rounded text-[10px]'
+                                                    : 'text-slate-500'
+                                                    }`}>
+                                                    Stock: {p.stock} u.
+                                                </span>
+                                                <span className="font-mono font-bold text-emerald-700 text-sm">$ {p.price.toLocaleString()}</span>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-slate-500">Stock: {p.stock} u.</span>
-                                            <span className="font-mono font-bold text-emerald-700 text-sm">$ {p.price.toLocaleString()}</span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -881,14 +931,14 @@ export default function VentasPosPage() {
                             <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Cliente</h3>
                             {selectedClient ? (
                                 <button
-                                    onClick={() => { setSelectedClient(null); setClientQuery(''); setShippingAddress(''); setIsCreatingClient(false); }}
+                                    onClick={() => { setSelectedClient(null); setClientQuery(''); setShippingAddress(''); setIsCreatingClient(false); setClientError(null); }}
                                     className="text-rose-600 font-bold hover:underline"
                                 >
                                     Quitar
                                 </button>
                             ) : (
                                 <button
-                                    onClick={() => setIsCreatingClient(!isCreatingClient)}
+                                    onClick={() => { setIsCreatingClient(!isCreatingClient); setClientError(null); }}
                                     className="text-emerald-700 font-bold hover:underline"
                                 >
                                     {isCreatingClient ? '✕ Cancelar' : '+ Alta Rápida'}
@@ -900,8 +950,14 @@ export default function VentasPosPage() {
                             <div className="p-2.5 bg-slate-50 border border-emerald-300 rounded-lg space-y-2">
                                 <div className="flex justify-between items-center">
                                     <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">Alta Rápida</span>
-                                    <button onClick={() => setIsCreatingClient(false)} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                                    <button onClick={() => { setIsCreatingClient(false); setClientError(null); }} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
                                 </div>
+
+                                {clientError && (
+                                    <div className="p-2 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] rounded-md font-medium">
+                                        {clientError}
+                                    </div>
+                                )}
 
                                 <input
                                     type="text"
@@ -913,7 +969,7 @@ export default function VentasPosPage() {
 
                                 <input
                                     type="text"
-                                    placeholder="TELÉFONO *"
+                                    placeholder="TELÉFONO"
                                     value={newClientPhone}
                                     onChange={(e) => setNewClientPhone(e.target.value)}
                                     className="w-full border border-slate-200 rounded p-1.5 font-mono uppercase bg-white outline-none text-xs"
@@ -924,20 +980,27 @@ export default function VentasPosPage() {
                                     <input
                                         ref={newClientAddressInputRef}
                                         type="text"
-                                        placeholder="DIRECCIÓN *"
+                                        placeholder="DIRECCIÓN"
                                         value={newClientAddress}
                                         onChange={(e) => setNewClientAddress(e.target.value.toUpperCase())}
                                         className="w-full border border-slate-200 rounded p-1.5 pl-7 uppercase bg-white outline-none text-xs"
                                     />
                                 </div>
 
-                                <input
-                                    type="email"
-                                    placeholder="E-MAIL (PARA COMPROBANTE/FACTURA) *"
-                                    value={newClientEmail}
-                                    onChange={(e) => setNewClientEmail(e.target.value)}
-                                    className="w-full border border-slate-200 rounded p-1.5 lowercase bg-white outline-none text-xs"
-                                />
+                                <div>
+                                    <input
+                                        type="email"
+                                        placeholder="E-MAIL (OBLIGATORIO PARA COMPROBANTE) *"
+                                        value={newClientEmail}
+                                        onChange={(e) => {
+                                            setNewClientEmail(e.target.value);
+                                            if (e.target.value.trim() !== '') setClientError(null);
+                                        }}
+                                        className={`w-full border rounded p-1.5 lowercase bg-white outline-none text-xs ${!newClientEmail ? 'border-amber-400 bg-amber-50/30' : 'border-slate-200'
+                                            }`}
+                                    />
+                                    <p className="text-[9px] text-slate-400 mt-0.5">Necesario para enviar factura y remito.</p>
+                                </div>
 
                                 <button
                                     onClick={handleSaveClientToDatabase}
@@ -982,6 +1045,7 @@ export default function VentasPosPage() {
                                                         setNewClientName(clientQuery);
                                                         setIsCreatingClient(true);
                                                         setIsClientDropdownOpen(false);
+                                                        setClientError('⚠️ El correo electrónico es obligatorio para registrar el cliente.');
                                                     }}
                                                     className="w-full py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-[10px] uppercase"
                                                 >
@@ -1179,133 +1243,166 @@ export default function VentasPosPage() {
                 </div>
             )}
 
+            {/* MODAL CON DISEÑO INSTITUCIONAL DE FACTURA C */}
             {previewModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
                     <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="p-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
                             <div>
                                 <h2 className="font-extrabold text-sm uppercase tracking-wider">
-                                    {previewModal.mode === 'INVOICE' ? 'Vista Previa - Factura Electrónica' : 'Vista Previa - Comprobante de Pedido'}
+                                    {previewModal.mode === 'INVOICE' ? 'Vista Previa - Factura C' : 'Vista Previa - Comprobante de Pedido'}
                                 </h2>
                                 <p className="text-[10px] text-slate-400 font-mono">Orden #{previewModal.order.id} | {new Date(previewModal.order.createdAt).toLocaleString()}</p>
                             </div>
                             <button
                                 onClick={() => setPreviewModal(null)}
-                                className="text-slate-400 hover:text-white font-bold text-lg px-2"
+                                className="text-slate-400 hover:text-white font-bold text-lg px-2 cursor-pointer"
                             >
                                 ✕
                             </button>
                         </div>
 
-                        <div className="p-6 overflow-y-auto bg-slate-50 flex-1 space-y-4 font-mono text-xs text-slate-800">
-                            <div className="bg-white p-6 border border-slate-200 rounded-lg shadow-xs space-y-4 print:border-none print:shadow-none">
-                                <div className="flex justify-between items-start border-b pb-3">
+                        {/* CUERPO DE LA FACTURA ESTILO C */}
+                        <div className="p-6 overflow-y-auto bg-stone-100 flex-1 space-y-4 font-sans text-xs text-slate-800">
+                            <div className="bg-white p-6 rounded-lg shadow-sm border-t-8 border-b-8 border-emerald-900 space-y-4 relative">
+
+                                {/* CABECERA CON MARCA Y RECUADRO C */}
+                                <div className="flex justify-between items-start border-b border-slate-200 pb-3">
                                     <div>
-                                        <h3 className="font-bold text-lg">{settings?.commerceName || 'NUESTRO COMERCIO'}</h3>
-                                        <p className="text-[10px] text-slate-500">{settings?.address || 'Dirección no configurada'}</p>
-                                        {settings?.cuit && <p className="text-[10px] text-slate-500">CUIT: {settings.cuit}</p>}
-                                        {settings?.phone && <p className="text-[10px] text-slate-500">Tel: {settings.phone}</p>}
+                                        <h3 className="font-black text-base text-emerald-900 uppercase">{settings?.commerceName || 'TIENDA DE PLANTAS'}</h3>
+                                        <p className="text-[10px] text-slate-500">{settings?.address || 'Pedro Mascagni 316, Lomas de Zamora'}</p>
+                                        <p className="text-[10px] text-slate-500">Tel: {settings?.phone || '+54 11 40782378'} | CUIT: {settings?.cuit || '20-XXXXXXXX-X'}</p>
+                                    </div>
+
+                                    <div className="border-2 border-emerald-700 bg-emerald-50 px-3 py-1 rounded text-center">
+                                        <span className="font-black text-xl text-emerald-800 block leading-none">C</span>
+                                        <span className="text-[7px] font-bold text-emerald-900 uppercase tracking-wider">COD. 011</span>
+                                    </div>
+                                </div>
+
+                                {/* SELLO DE ESTADO CENTRAL */}
+                                <div className={`text-center font-extrabold text-2xl my-2 tracking-wide uppercase ${previewModal.order.isPaid || (previewModal.order.pendingBalance ?? 0) === 0 ? 'text-emerald-700' : 'text-amber-600'}`}>
+                                    {previewModal.order.isPaid || (previewModal.order.pendingBalance ?? 0) === 0 ? 'Pagado' : 'Pago Parcial / Pendiente'}
+                                </div>
+
+                                <h2 className="font-black text-lg text-slate-800">Factura</h2>
+
+                                {/* METADATOS DE FACTURACIÓN Y CLIENTE */}
+                                <div className="grid grid-cols-2 gap-4 text-[11px] bg-slate-50 p-3 rounded-md border border-slate-200 font-mono">
+                                    <div>
+                                        <p><span className="text-slate-400 font-bold">Fecha:</span> <strong>{new Date(previewModal.order.createdAt).toLocaleDateString('es-AR')}</strong></p>
+                                        <p><span className="text-slate-400 font-bold">N° de Factura:</span> <strong>0001-{previewModal.order.id.slice(-6).toUpperCase()}</strong></p>
+                                        <p><span className="text-slate-400 font-bold">Condición IVA:</span> <strong>Consumidor Final</strong></p>
                                     </div>
                                     <div className="text-right">
-                                        <span className="font-bold border px-2 py-1 rounded text-xs bg-slate-100">
-                                            {previewModal.mode === 'INVOICE' ? (previewModal.order.invoiceType || 'FACTURA B') : 'PEDIDO PENDIENTE'}
-                                        </span>
-                                        {previewModal.order.invoiced && (
-                                            <p className="text-[10px] font-bold text-emerald-700 mt-1">N° {previewModal.order.invoiceNumber}</p>
-                                        )}
+                                        <p className="text-slate-400 font-bold">Facturar a:</p>
+                                        <p className="font-bold text-slate-900 uppercase text-xs">{previewModal.order.client}</p>
+                                        <p className="text-slate-500 text-[10px]">{previewModal.order.shippingAddress || 'Lomas de Zamora'}</p>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50 p-2.5 rounded">
-                                    <div>
-                                        <strong>Cliente:</strong> {previewModal.order.client}<br />
-                                        <strong>Estado Pago:</strong> {previewModal.order.paymentStatus || (previewModal.order.isPaid ? 'PAGADO' : 'PENDIENTE')}
-                                    </div>
-                                    <div>
-                                        <strong>E-mail:</strong> {targetEmail || 'S/N'}<br />
-                                        {previewModal.order.isShipping && (
-                                            <span><strong>Envío:</strong> {previewModal.order.shippingAddress}</span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <table className="w-full text-left text-xs border-collapse">
-                                    <thead className="border-b text-slate-500 uppercase text-[9px]">
+                                {/* TABLA VERDE OLIVA INSTITUCIONAL */}
+                                <table className="w-full text-left text-xs border-collapse font-sans">
+                                    <thead className="bg-emerald-800 text-white font-bold uppercase text-[10px]">
                                         <tr>
-                                            <th className="py-1">Cód</th>
-                                            <th className="py-1">Descripción</th>
-                                            <th className="py-1 text-center">Cant</th>
-                                            <th className="py-1 text-right">Precio</th>
-                                            <th className="py-1 text-right">Subtotal</th>
+                                            <th className="p-2 text-center w-12">Cant.</th>
+                                            <th className="p-2">Descripción</th>
+                                            <th className="p-2 text-right">Precio unitario</th>
+                                            <th className="p-2 text-right">Total</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100">
+                                    <tbody className="divide-y divide-slate-200">
                                         {previewModal.order.items.length === 0 ? (
                                             <tr>
-                                                <td colSpan={5} className="py-4 text-center text-slate-400 italic">Sin ítems en el detalle</td>
+                                                <td colSpan={4} className="p-4 text-center text-slate-400 italic">Sin ítems en el detalle</td>
                                             </tr>
                                         ) : (
                                             previewModal.order.items.map((it, idx) => (
-                                                <tr key={idx}>
-                                                    <td className="py-1.5">{it.code}</td>
-                                                    <td className="py-1.5 font-bold">{it.name}</td>
-                                                    <td className="py-1.5 text-center">{it.quantity}</td>
-                                                    <td className="py-1.5 text-right">$ {it.price.toLocaleString()}</td>
-                                                    <td className="py-1.5 text-right font-bold">$ {(it.price * it.quantity).toLocaleString()}</td>
+                                                <tr key={idx} className="hover:bg-slate-50 font-medium">
+                                                    <td className="p-2 text-center font-bold">{it.quantity}</td>
+                                                    <td className="p-2 font-bold text-slate-800">{it.name}</td>
+                                                    <td className="p-2 text-right font-mono">$ {it.price.toLocaleString('es-AR')}</td>
+                                                    <td className="p-2 text-right font-mono font-bold">$ {(it.price * it.quantity).toLocaleString('es-AR')}</td>
                                                 </tr>
                                             ))
                                         )}
                                     </tbody>
                                 </table>
 
-                                <div className="border-t pt-2 flex justify-between items-center text-base font-bold">
-                                    <span>TOTAL:</span>
-                                    <span className="text-emerald-700 font-mono text-xl">$ {previewModal.order.total.toLocaleString()}</span>
-                                </div>
-                            </div>
+                                {/* DESGLOSE FINANCIERO DE PAGOS AL PIE */}
+                                <div className="flex flex-col items-end border-t border-slate-300 pt-3 font-mono text-xs space-y-1">
+                                    <div className="flex justify-between w-56 font-black text-sm text-slate-900 border-b pb-1">
+                                        <span>Total:</span>
+                                        <span>$ {previewModal.order.total.toLocaleString('es-AR')}</span>
+                                    </div>
 
-                            <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1.5">
-                                <label className="block text-[10px] font-bold uppercase text-slate-500">Destinatario de Correo Electrónico:</label>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="email"
-                                        value={targetEmail}
-                                        onChange={(e) => setTargetEmail(e.target.value)}
-                                        placeholder="cliente@correo.com"
-                                        className="flex-1 border border-slate-200 rounded px-2.5 py-1 text-xs font-mono font-bold bg-slate-50 outline-none"
-                                    />
-                                    <button
-                                        onClick={handleSendEmailFromPreview}
-                                        disabled={isSendingEmail}
-                                        className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs flex items-center gap-1"
-                                    >
-                                        <span>{isSendingEmail ? 'Enviando...' : '✉️ Enviar Mail'}</span>
-                                    </button>
+                                    {((previewModal.order.paidAmount ?? 0) > 0 || previewModal.order.isPaid) && (
+                                        <div className="flex justify-between w-56 font-bold text-emerald-700">
+                                            <span>Pagado:</span>
+                                            <span>
+                                                $ {(
+                                                    previewModal.order.paidAmount ??
+                                                    (previewModal.order.isPaid ? previewModal.order.total : 0)
+                                                ).toLocaleString('es-AR')}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {((previewModal.order.pendingBalance ?? (previewModal.order.isPaid ? 0 : previewModal.order.total)) > 0) && (
+                                        <div className="flex justify-between w-56 font-bold text-amber-700">
+                                            <span>Resta Cobrar:</span>
+                                            <span>
+                                                $ {(
+                                                    previewModal.order.pendingBalance ??
+                                                    (previewModal.order.isPaid ? 0 : previewModal.order.total)
+                                                ).toLocaleString('es-AR')}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="text-[10px] text-slate-500 italic pt-4">
+                                    Gracias por su preferencia.
                                 </div>
                             </div>
                         </div>
 
+                        {/* BARRA DE ACCIONES DE ENVÍO DIRECTO Y REAL */}
                         <div className="p-3 bg-slate-100 border-t border-slate-200 flex justify-between items-center shrink-0">
                             <button
                                 onClick={() => setPreviewModal(null)}
-                                className="px-3 py-1.5 text-slate-600 font-bold hover:underline textxs"
+                                className="px-3 py-1.5 text-slate-600 font-bold hover:underline text-xs cursor-pointer"
                             >
                                 Cerrar
                             </button>
 
                             <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleSendWhatsAppFromPreview(previewModal.order)}
+                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs uppercase shadow-xs flex items-center gap-1 cursor-pointer"
+                                >
+                                    <span>📱 WhatsApp</span>
+                                </button>
+
+                                <button
+                                    onClick={() => handleSendEmailFromPreview(previewModal.order)}
+                                    className="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold text-xs uppercase shadow-xs flex items-center gap-1 cursor-pointer"
+                                >
+                                    <span>📧 E-mail</span>
+                                </button>
+
                                 {previewModal.mode === 'INVOICE' && !previewModal.order.invoiced && (
                                     <button
                                         onClick={handleGenerateInvoiceFromPreview}
-                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs uppercase shadow-xs"
+                                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs uppercase shadow-xs cursor-pointer"
                                     >
-                                        🧾 Emitir Factura Electrónica
+                                        🧾 Emitir Factura C
                                     </button>
                                 )}
 
                                 <button
                                     onClick={() => window.print()}
-                                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs uppercase shadow-xs flex items-center gap-1"
+                                    className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs uppercase shadow-xs flex items-center gap-1 cursor-pointer"
                                 >
                                     <span>🖨️ Imprimir</span>
                                 </button>

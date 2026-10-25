@@ -5,18 +5,16 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
 export async function GET() {
     try {
-        const session = await getServerSession(authOptions);
-        const emailSesion = session?.user?.email || 'admin@tiendadeplantas.com';
-
-        // Buscamos al usuario de forma segura
-        const user = await prisma.customer.findUnique({
-            where: { email: emailSesion }
+        // Buscamos de forma segura al administrador por su rol en TiDB[cite: 5]
+        let user = await prisma.customer.findFirst({
+            where: { role: 'ADMIN' }
         });
 
         if (!user) {
+            const session = await getServerSession(authOptions);
             return NextResponse.json({
-                nombre: session?.user?.name || 'Daniel Urraca',
-                email: emailSesion,
+                nombre: session?.user?.name || 'Daniel A. Urraca',
+                email: session?.user?.email || 'admin@tiendadeplantas.com',
                 imagenUrl: session?.user?.image || ''
             });
         }
@@ -27,7 +25,7 @@ export async function GET() {
             imagenUrl: user.image_url || ''
         });
     } catch (error: any) {
-        console.error('Error detallado en GET /api/admin/perfil:', error);
+        console.error('Error en GET /api/admin/perfil:', error);
         return NextResponse.json({
             success: false,
             error: error.message || 'Error al cargar perfil'
@@ -37,21 +35,41 @@ export async function GET() {
 
 export async function PUT(request: Request) {
     try {
-        const session = await getServerSession(authOptions);
-        const emailSesion = session?.user?.email || 'admin@tiendadeplantas.com';
-
         const body = await request.json();
         const { nombre, email, imagenUrl } = body;
 
-        // Actualizamos usando update único por email (evita el error P2000 de updateMany)
-        const updated = await prisma.customer.update({
-            where: { email: emailSesion },
-            data: {
-                name: nombre,
-                email: email,
-                image_url: imagenUrl || null,
-            }
+        // Buscamos al administrador actual por su rol
+        const adminUser = await prisma.customer.findFirst({
+            where: { role: 'ADMIN' }
         });
+
+        let updated;
+        if (adminUser) {
+            // Actualización directa y persistente en TiDB usando el ID del admin
+            updated = await prisma.customer.update({
+                where: { id: adminUser.id },
+                data: {
+                    name: nombre,
+                    email: email,
+                    image_url: imagenUrl !== undefined ? imagenUrl : adminUser.image_url
+                }
+            });
+        } else {
+            // Creación de emergencia por si faltara el registro de admin
+            updated = await prisma.customer.create({
+                data: {
+                    email: email || 'admin@tiendadeplantas.com',
+                    name: nombre || 'Daniel A. Urraca',
+                    image_url: imagenUrl || null,
+                    password_hash: '$2b$10$AdminDefaultHashForSessionUser12345',
+                    role: 'ADMIN',
+                    phone: '11-0000-0000',
+                    address: 'Lomas de Zamora, Buenos Aires',
+                    dni_cuit: '20-00000000-0',
+                    gender: 'MASCULINO'
+                }
+            });
+        }
 
         return NextResponse.json({
             success: true,

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ModuloCatalogo } from './_components/ModuloCatalogo';
 import VentasPage from './_components/ventas';
+import ModuloHistorialVentas from './_components/ModuloHistorialVentas';
 import { getProducts, getCategories, getSuppliers } from '@/actions/product-actions';
 
 interface Category {
@@ -44,7 +45,6 @@ export default function ViveroPage() {
 
     useEffect(() => {
         const tabGuardada = localStorage.getItem('vivero_tab_activa');
-        // Si por casualidad guardó 'clientes', lo forzamos a 'pos' para evitar pantallas rotas
         if (tabGuardada && tabGuardada !== 'clientes') {
             setTabActiva(tabGuardada);
         }
@@ -101,7 +101,7 @@ export default function ViveroPage() {
                     <p className="text-[9px] text-slate-500 font-medium">{fechaActual}</p>
                 </div>
 
-                {/* 2. Solapas de navegación (Sólo POS y Catálogo) */}
+                {/* 2. Solapas de navegación (POS, Historial y Catálogo) */}
                 <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-md border border-slate-200">
                     <button
                         onClick={() => cambiarTab('pos')}
@@ -111,6 +111,16 @@ export default function ViveroPage() {
                             }`}
                     >
                         <span>🛒</span> Caja Diaria / Vta
+                    </button>
+
+                    <button
+                        onClick={() => cambiarTab('historial')}
+                        className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${tabActiva === 'historial'
+                            ? 'bg-white text-emerald-800 shadow-2xs border border-slate-200'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                            }`}
+                    >
+                        <span>📋</span> Historial / Comprobantes
                     </button>
 
                     <button
@@ -124,7 +134,7 @@ export default function ViveroPage() {
                     </button>
                 </div>
 
-                {/* 3. Métricas compactas con tooltips */}
+                {/* 3. Métricas compactas */}
                 <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded-md border border-slate-200 shrink-0 text-xs">
                     <div
                         title="Especies en Stock"
@@ -150,9 +160,10 @@ export default function ViveroPage() {
 
             </div>
 
-            {/* CONTENIDO EXPANDIDO */}
+            {/* CONTENIDO EXPANDIDO DE SOLAPAS */}
             <div className="w-full flex-1 flex flex-col min-h-[65vh]">
                 {tabActiva === 'pos' && <VentasPage />}
+                {tabActiva === 'historial' && <ModuloHistorialVentas />}
                 {tabActiva === 'catalogo' && (
                     loading ? (
                         <div className="text-center py-20 text-xs text-slate-500 font-semibold">Cargando catálogo general...</div>

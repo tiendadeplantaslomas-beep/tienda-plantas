@@ -29,20 +29,28 @@ export async function getClients(search = '', order: 'asc' | 'desc' = 'asc') {
     }
 }
 
-// Crear cliente desde el panel admin
-export async function createClient(data: { name: string; email: string; phone?: string; address?: string }) {
+// Crear cliente desde el panel admin o mostrador
+export async function createClient(data: { name: string; email?: string; phone?: string; address?: string }) {
     try {
-        const existing = await prisma.customer.findUnique({ where: { email: data.email } });
-        if (existing) {
-            return { error: 'Ya existe un cliente con ese correo electrónico.' };
+        if (!data.email || data.email.trim() === '') {
+            return { error: '⚠️ El correo electrónico es obligatorio para poder registrar el cliente.' };
         }
 
-        const password_hash = await bcrypt.hash('123456', 10); // Contraseña provisional por defecto
+        const emailTrimmed = data.email.trim().toLowerCase();
 
+        // Verificar si ya existe en TiDB
+        const existing = await prisma.customer.findUnique({ where: { email: emailTrimmed } });
+        if (existing) {
+            return { error: 'Ya existe un cliente registrado con ese correo electrónico.' };
+        }
+
+        const password_hash = await bcrypt.hash('123456', 10);
+
+        // Crear registro en la BD
         const newClient = await prisma.customer.create({
             data: {
                 name: data.name,
-                email: data.email,
+                email: emailTrimmed,
                 phone: data.phone || '',
                 address: data.address || '',
                 password_hash,
@@ -51,26 +59,30 @@ export async function createClient(data: { name: string; email: string; phone?: 
             }
         });
 
-        revalidatePath('/admin/clientes');
-        revalidatePath('/vivero'); // Por si se usa en ventas
-        return { success: true, data: newClient };
+        // IMPORTANTE: Devolvemos directamente el cliente recién creado sin forzar revalidatePath
+        return { success: true, customer: newClient, data: newClient };
     } catch (error: any) {
-        console.error('Error al crear cliente:', error);
-        return { error: error.message || 'Error al crear el cliente.' };
+        console.error('Error en createClient:', error);
+        return { error: error.message || 'Error al crear el cliente en la base de datos.' };
     }
 }
 
 // Actualizar cliente existente
-export async function updateClient(id: string, data: { name: string; email: string; phone?: string; address?: string }) {
+export async function updateClient(id: string, data: { name: string; email?: string; phone?: string; address?: string }) {
     try {
+        const updateData: any = {
+            name: data.name,
+            phone: data.phone || '',
+            address: data.address || ''
+        };
+
+        if (data.email && data.email.trim() !== '') {
+            updateData.email = data.email.trim();
+        }
+
         const updated = await prisma.customer.update({
             where: { id },
-            data: {
-                name: data.name,
-                email: data.email,
-                phone: data.phone || '',
-                address: data.address || ''
-            }
+            data: updateData
         });
 
         revalidatePath('/admin/clientes');

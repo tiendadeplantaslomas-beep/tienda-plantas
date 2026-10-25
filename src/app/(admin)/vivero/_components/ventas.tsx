@@ -20,6 +20,7 @@ interface Product {
 interface Customer {
     id: string;
     name: string;
+    email?: string;
     phone?: string;
     address?: string;
 }
@@ -46,6 +47,7 @@ export default function VentasPage() {
     const [newCustomerName, setNewCustomerName] = useState('');
     const [newCustomerPhone, setNewCustomerPhone] = useState('');
     const [newCustomerAddress, setNewCustomerAddress] = useState('');
+    const [newCustomerEmail, setNewCustomerEmail] = useState(''); // <-- NUEVO CAMPO E-MAIL
 
     // --- ENVÍO ---
     const [shippingAddress, setShippingAddress] = useState('');
@@ -168,12 +170,19 @@ export default function VentasPage() {
             return;
         }
 
+        // Validación estricta del e-mail requerido para comprobantes y facturas
+        if (!newCustomerEmail || newCustomerEmail.trim() === '') {
+            setMessage({ type: 'error', text: '⚠️ El e-mail es obligatorio para enviar comprobantes y facturas.' });
+            return;
+        }
+
         setSavingCustomer(true);
         setMessage(null);
 
         try {
             const res = await createCustomer({
                 name: newCustomerName,
+                email: newCustomerEmail.trim().toLowerCase(), // <-- ENVÍO DE EMAIL
                 phone: newCustomerPhone,
                 address: newCustomerAddress,
             });
@@ -182,6 +191,7 @@ export default function VentasPage() {
                 const savedCust: Customer = {
                     id: res.customer.id,
                     name: res.customer.name,
+                    email: res.customer.email || undefined,
                     phone: res.customer.phone || undefined,
                     address: res.customer.address || undefined,
                 };
@@ -193,6 +203,7 @@ export default function VentasPage() {
                 setNewCustomerName('');
                 setNewCustomerPhone('');
                 setNewCustomerAddress('');
+                setNewCustomerEmail('');
                 setMessage({ type: 'success', text: `¡Cliente "${savedCust.name}" registrado correctamente!` });
             } else {
                 setMessage({ type: 'error', text: res?.error || 'No se pudo guardar el cliente.' });
@@ -286,6 +297,7 @@ export default function VentasPage() {
         const res = await createSale({
             paymentMethod,
             customerName: finalCustomerName,
+            customerId: selectedCustomer ? selectedCustomer.id : undefined, // <-- Añadido aquí
             notes: fullNotes || undefined,
             items: cart,
         });
@@ -329,7 +341,7 @@ export default function VentasPage() {
                 </div>
             )}
 
-            {/* CONTENEDOR PRINCIPAL EQUILIBRADO (445px): Mayor espacio interno manteniendo visible el footer */}
+            {/* CONTENEDOR PRINCIPAL EQUILIBRADO (445px) */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-start h-[445px]">
 
                 {/* COLUMNA IZQUIERDA: CATÁLOGO (8 Columnas) */}
@@ -531,7 +543,7 @@ export default function VentasPage() {
                             {isCreatingCustomer ? (
                                 <div className="p-1 bg-slate-100 rounded border border-slate-300 space-y-1">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-[8px] font-bold text-slate-700 uppercase">Alta Rápida</span>
+                                        <span className="text-[8px] font-bold text-slate-700 uppercase">Alta Rápida (E-mail Obligatorio)</span>
                                         <button onClick={() => setIsCreatingCustomer(false)} className="text-[9px] text-slate-400 hover:text-slate-700 font-bold">✕</button>
                                     </div>
                                     <input
@@ -541,6 +553,17 @@ export default function VentasPage() {
                                         onChange={(e) => setNewCustomerName(e.target.value)}
                                         className="w-full px-1 py-0.5 bg-white border border-slate-300 rounded text-[10px] font-semibold uppercase focus:outline-none focus:ring-1 focus:ring-emerald-500"
                                     />
+
+                                    {/* NUEVO CAMPO E-MAIL */}
+                                    <input
+                                        type="email"
+                                        placeholder="E-mail (Para comprobante/factura) *"
+                                        value={newCustomerEmail}
+                                        onChange={(e) => setNewCustomerEmail(e.target.value)}
+                                        className={`w-full px-1 py-0.5 border rounded text-[10px] font-semibold lowercase focus:outline-none focus:ring-1 ${!newCustomerEmail ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300 focus:ring-emerald-500 bg-white'
+                                            }`}
+                                    />
+
                                     <div className="grid grid-cols-2 gap-1">
                                         <input
                                             type="text"
@@ -563,7 +586,7 @@ export default function VentasPage() {
                                         disabled={savingCustomer}
                                         className="w-full py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded shadow-sm disabled:opacity-50 transition-colors"
                                     >
-                                        {savingCustomer ? 'Guardando...' : '💾 Guardar'}
+                                        {savingCustomer ? 'Guardando...' : '💾 Guardar Cliente'}
                                     </button>
                                 </div>
                             ) : (
