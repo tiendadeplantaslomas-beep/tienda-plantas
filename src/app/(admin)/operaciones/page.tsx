@@ -19,7 +19,7 @@ interface Order {
     paidAmount: number;
     pendingBalance: number;
     paymentStatus: string;
-    status: 'REGISTRADO' | 'ENTREGADO' | 'RECLAMO';
+    status: 'REGISTRADO' | 'ENTREGADO' | 'RECLAMO' | 'ATENDIDO'; // <-- Añadido 'ATENDIDO' aquí
     isPaid: boolean;
     paymentMethod: string;
     paymentReference?: string;

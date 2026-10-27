@@ -8,13 +8,6 @@ import ProductCarousel from './components/ProductCarousel';
 import { X, ShieldCheck, UserCheck, AlertCircle, Tag, MapPin, Sparkles, MessageSquarePlus, Send, Star, ExternalLink } from 'lucide-react';
 import CartDrawer from '@/components/CartDrawer';
 
-const CATEGORIAS_RAPIDAS = [
-    { id: 'interior', nombre: 'Plantas de Interior', imagen: 'https://images.unsplash.com/photo-1545241047-6083a3684587?auto=format&fit=crop&w=600&q=80', link: '/tienda?categoria=Plantas de Interior' },
-    { id: 'exterior', nombre: 'Plantas de Exterior', imagen: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=600&q=80', link: '/tienda?categoria=Plantas de Exterior' },
-    { id: 'macetas', nombre: 'Macetas y Jardinería', imagen: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&fit=crop&w=600&q=80', link: '/tienda?categoria=Macetas' },
-    { id: 'sustratos', nombre: 'Sustratos y Abonos', imagen: 'https://images.unsplash.com/photo-1530968461151-8caad5f82025?auto=format&fit=crop&w=600&q=80', link: '/tienda?categoria=Sustratos' },
-];
-
 const PROMO_GRADIENTS = [
     "from-emerald-800 to-emerald-950",
     "from-blue-900 to-slate-950",
@@ -95,15 +88,15 @@ function TiendaContent() {
     const [claimMessage, setClaimMessage] = useState('');
     const [claimSuccess, setClaimSuccess] = useState(false);
 
-    // Estados para las reseñas y formulario interactivo
     const [reseñas, setReseñas] = useState<Reseña[]>([]);
     const [showResenaForm, setShowResenaForm] = useState(false);
-    const [nombreResena, setNombreResena] = useState('');
     const [comentarioResena, setComentarioResena] = useState('');
     const [estrellasResena, setEstrellasResena] = useState(5);
     const [mensajeResenaExito, setMensajeResenaExito] = useState('');
 
+    // Refs declarados correctamente al nivel superior del componente
     const categoriasScrollRef = useRef<HTMLDivElement>(null);
+    const promosScrollRef = useRef<HTMLDivElement>(null);
 
     const fetchPromotions = () => {
         fetch(`/api/promotions?t=${Date.now()}`, { cache: 'no-store' })
@@ -191,31 +184,21 @@ function TiendaContent() {
         }
     }, []);
 
-    // Carrusel automático para Banners
+    // SEPARACIÓN DINÁMICA DE BANNERS POR SECCIÓN DEL CMS (Solo activos)
+    const bannersHero = banners.filter((b: any) => b.activo !== false && (!b.seccion || b.seccion === 'hero' || b.seccion === 'Hero / Banner Principal'));
+    const bannersPromos = banners.filter((b: any) => b.activo !== false && (b.seccion === 'promociones' || b.seccion === 'Sección de Promociones'));
+    const bannersCategoriasCMS = banners.filter((b: any) => b.activo !== false && (b.seccion === 'categorias' || b.seccion === 'Carrusel de Categorías'));
+    const bannersInstitucional = banners.filter((b: any) => b.activo !== false && (b.seccion === 'institucional' || b.seccion === 'Bloque Institucional'));
+
+    const listaCategoriasTienda = bannersCategoriasCMS;
+
     useEffect(() => {
-        if (banners.length <= 1) return;
+        if (bannersHero.length <= 1) return;
         const timer = setInterval(() => {
-            setCurrentBanner((prev) => (prev + 1) % banners.length);
+            setCurrentBanner((prev) => (prev + 1) % bannersHero.length);
         }, 6000);
         return () => clearInterval(timer);
-    }, [banners.length]);
-
-    // Carrusel automático para Promociones
-    useEffect(() => {
-        if (promotions.length <= 1) return;
-        const promoTimer = setInterval(() => {
-            setCurrentPromo((prev) => {
-                const next = (prev + 1) % promotions.length;
-                if (next === 0) fetchPromotions();
-                return next;
-            });
-        }, 5000);
-        return () => clearInterval(promoTimer);
-    }, [promotions.length]);
-
-    const handleRemoveExpiredPromo = (id: number | string) => {
-        setPromotions((prev) => prev.filter((p) => p.id !== id));
-    };
+    }, [bannersHero.length]);
 
     const scrollCategorias = (direccion: 'left' | 'right') => {
         if (categoriasScrollRef.current) {
@@ -225,6 +208,14 @@ function TiendaContent() {
                 left: direccion === 'left' ? scrollLeft - scrollAmount : scrollLeft + scrollAmount,
                 behavior: 'smooth'
             });
+        }
+    };
+
+    const scrollPromos = (direccion: 'left' | 'right') => {
+        if (promosScrollRef.current) {
+            const { scrollLeft, clientWidth } = promosScrollRef.current;
+            const offset = direccion === 'left' ? -clientWidth / 2 : clientWidth / 2;
+            promosScrollRef.current.scrollTo({ left: scrollLeft + offset, behavior: 'smooth' });
         }
     };
 
@@ -312,6 +303,11 @@ function TiendaContent() {
         })
         : productosDestacados;
 
+        // Filtrar los banners de la barra de beneficios desde el CMS
+    const bannersBeneficios = banners.filter(
+        (b: any) => b.activo !== false && (b.seccion === 'beneficios' || b.seccion === 'Barra de Beneficios')
+    );
+
     return (
         <div className="h-full w-full overflow-y-auto flex flex-col bg-stone-50 text-stone-800 font-sans pr-1">
             <style jsx global>{`
@@ -335,8 +331,7 @@ function TiendaContent() {
                     <div className="absolute inset-0 flex items-center justify-center text-stone-400 text-xs">
                         Cargando portadas...
                     </div>
-                ) : banners.length === 0 ? (
-                    /* BANNER POR DEFECTO SI LA BD ESTÁ VACÍA */
+                ) : bannersHero.length === 0 ? (
                     <div className="absolute inset-0 opacity-100 z-10">
                         <div className="absolute inset-0 z-0">
                             <img src="https://images.unsplash.com/photo-1463936575829-25148e1db1b8?auto=format&fit=crop&w=1200&q=80" alt="Tienda de Plantas" className="w-full h-full object-cover opacity-60 scale-105" />
@@ -361,7 +356,7 @@ function TiendaContent() {
                         </div>
                     </div>
                 ) : (
-                    banners.map((banner, index) => (
+                    bannersHero.map((banner, index) => (
                         <div
                             key={banner.id}
                             className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentBanner ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
@@ -397,9 +392,9 @@ function TiendaContent() {
                     ))
                 )}
 
-                {!cargandoBanners && banners.length > 1 && (
+                {!cargandoBanners && bannersHero.length > 1 && (
                     <div className="absolute bottom-4 left-0 right-0 z-30 flex justify-center gap-2">
-                        {banners.map((_, idx) => (
+                        {bannersHero.map((_, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => setCurrentBanner(idx)}
@@ -411,122 +406,243 @@ function TiendaContent() {
                 )}
             </section>
 
-            {/* 2. CARRUSEL DE CATEGORÍAS */}
-            <section className="max-w-7xl w-full mx-auto px-6 py-10 shrink-0">
-                <div className="flex justify-between items-end mb-6">
-                    <div>
-                        <h2 className="text-xl font-black text-stone-900 tracking-tight">Comprá por Categoría</h2>
-                        <p className="text-xs text-stone-500 mt-0.5">Explorá nuestras secciones y encontrá lo que buscas</p>
+           {/* 2. CARRUSEL DE CATEGORÍAS */}
+            {listaCategoriasTienda.length > 0 && (
+                <section className="max-w-7xl w-full mx-auto px-6 py-8 shrink-0">
+                    <div className="flex justify-between items-end mb-4">
+                        <div>
+                            <h2 className="text-xl font-black text-stone-900 tracking-tight">Comprá por Categoría</h2>
+                            <p className="text-xs text-stone-500 mt-0.5">Explorá nuestras secciones y encontrá lo que buscas</p>
+                        </div>
                     </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => scrollCategorias('left')} className="bg-white hover:bg-emerald-50 text-stone-700 border border-stone-200 p-2 rounded-xl shadow-xs transition cursor-pointer">❮</button>
-                        <button onClick={() => scrollCategorias('right')} className="bg-white hover:bg-emerald-50 text-stone-700 border border-stone-200 p-2 rounded-xl shadow-xs transition cursor-pointer">❯</button>
-                    </div>
-                </div>
 
-                <div ref={categoriasScrollRef} className="flex gap-5 overflow-x-auto pb-4 pt-1 scrollbar-none scroll-smooth snap-x">
-                    {CATEGORIAS_RAPIDAS.map((cat) => (
-                        <Link
-                            key={cat.id}
-                            href={cat.link}
-                            className={`min-w-[240px] max-w-[260px] bg-white rounded-2xl p-4 shadow-sm border transition group shrink-0 snap-start ${categoriaSeleccionada?.toLowerCase() === cat.nombre.toLowerCase() ? 'border-emerald-600 ring-2 ring-emerald-500/30' : 'border-stone-200/80 hover:border-emerald-500 hover:shadow-md'}`}
+                    <div className="relative group bg-stone-100/80 border border-stone-200/60 rounded-3xl p-6 shadow-xs">
+                        <button
+                            onClick={() => scrollCategorias('left')}
+                            className="absolute left-[-16px] top-1/2 -translate-y-1/2 z-20 bg-white border border-stone-200 hover:bg-emerald-50 text-stone-800 w-11 h-11 rounded-full shadow-md transition flex items-center justify-center font-bold cursor-pointer text-base"
+                            aria-label="Anterior"
                         >
-                            <div className="w-full h-32 rounded-xl overflow-hidden bg-stone-100 border border-stone-100">
-                                <img src={cat.imagen} alt={cat.nombre} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                            </div>
-                            <div>
-                                <h4 className="text-xs font-bold text-stone-900 group-hover:text-emerald-700">{cat.nombre}</h4>
-                                <span className="text-[11px] text-emerald-600 font-semibold mt-1 inline-block">Explorar sección ➔</span>
-                            </div>
-                        </Link>
-                    ))}
-                </div>
-            </section>
+                            ❮
+                        </button>
 
-            {/* 3. CARRUSEL ROTATIVO DE PROMOCIONES VIGENTES */}
-            {promotions.length > 0 && (
-                <section className="max-w-7xl w-full mx-auto px-6 py-6 shrink-0">
-                    <div className="relative overflow-hidden rounded-3xl shadow-md">
-                        {promotions.map((promo, idx) => {
-                            const gradientClass = PROMO_GRADIENTS[idx % PROMO_GRADIENTS.length];
-                            const isActiveSlide = idx === currentPromo;
+                        <div ref={categoriasScrollRef} className="flex gap-5 overflow-x-auto pb-4 pt-1 scrollbar-none scroll-smooth snap-x px-2">
+                            {listaCategoriasTienda.map((cat: any) => {
+                                const nombreCat = cat.titulo || cat.name || cat.nombre;
+                                const imagenCat = cat.imagenUrl || cat.imagen || '/sinfoto.png';
+                                const linkCat = cat.link || `/tienda?categoria=${encodeURIComponent(nombreCat)}`;
+                                const isSelected = categoriaSeleccionada?.toLowerCase() === nombreCat.toLowerCase();
 
-                            return (
-                                <div
-                                    key={promo.id}
-                                    className={`relative overflow-hidden p-6 md:p-8 text-white transition-opacity duration-700 ease-in-out flex flex-col md:flex-row items-center justify-between gap-6 ${isActiveSlide ? 'block opacity-100 z-10' : 'hidden opacity-0 z-0'
-                                        } ${!promo.imagenUrl ? `bg-gradient-to-r ${gradientClass}` : 'bg-stone-900'}`}
-                                    style={
-                                        promo.imagenUrl
-                                            ? {
-                                                backgroundImage: `url(${promo.imagenUrl})`,
-                                                backgroundSize: 'cover',
-                                                backgroundPosition: 'center',
-                                            }
-                                            : undefined
-                                    }
-                                >
-                                    {promo.imagenUrl && (
-                                        <div className="absolute inset-0 bg-black/50 z-0"></div>
-                                    )}
-
-                                    <div className="relative z-10 space-y-2.5 text-center md:text-left">
-                                        <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-                                            <span className="bg-amber-400 text-stone-900 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider">
-                                                🔥 {promo.badge || 'Oferta Especial'}
-                                            </span>
-                                            {promo.stock !== undefined && (
-                                                <span className="bg-white/20 text-white text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-xs">
-                                                    📦 Quedan: {promo.stock}
-                                                </span>
-                                            )}
-                                            {promo.productos && promo.productos.length > 0 && (
-                                                <span className="bg-emerald-600/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-xs">
-                                                    🌿 Incluye {promo.productos.length} prod.
-                                                </span>
-                                            )}
-                                            {promo.hasta && (
-                                                <CountdownTimer
-                                                    hasta={promo.hasta}
-                                                    onExpire={() => handleRemoveExpiredPromo(promo.id)}
-                                                />
-                                            )}
-                                        </div>
-                                        <h3 className="text-2xl font-black tracking-tight drop-shadow-md">{promo.titulo}</h3>
-                                        {promo.descripcion && (
-                                            <p className="text-xs text-stone-100 max-w-lg drop-shadow">{promo.descripcion}</p>
-                                        )}
-                                    </div>
-
-                                    <button
-                                        onClick={() => handleOpenPromoModal(promo)}
-                                        className="relative z-10 bg-amber-400 hover:bg-amber-500 text-stone-900 font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-xl shadow-md transition shrink-0 inline-block text-center whitespace-nowrap cursor-pointer"
+                                return (
+                                    <Link
+                                        key={cat.id || nombreCat}
+                                        href={linkCat}
+                                        className={`min-w-[220px] max-w-[220px] bg-white rounded-2xl p-3 shadow-sm border transition-all duration-300 group/card shrink-0 snap-start flex flex-col justify-between ${isSelected ? 'border-emerald-600 ring-2 ring-emerald-500/30 shadow-md' : 'border-stone-200/80 hover:border-emerald-500 hover:shadow-md'}`}
                                     >
-                                        Aprovechar Promo ➔
-                                    </button>
-                                </div>
-                            );
-                        })}
+                                        <div className="w-full h-28 rounded-xl overflow-hidden bg-stone-100 border border-stone-100 shrink-0">
+                                            <img src={imagenCat} alt={nombreCat} className="w-full h-full object-cover group-hover/card:scale-105 transition duration-500" />
+                                        </div>
+                                        <div className="pt-2.5 flex flex-col justify-between flex-1">
+                                            <div>
+                                                <h4 className="text-xs font-bold text-stone-900 group-hover/card:text-emerald-700 truncate">{nombreCat}</h4>
+                                                {cat.subtitulo && <p className="text-[10px] text-stone-500 truncate mt-0.5">{cat.subtitulo}</p>}
+                                            </div>
+                                            <span className="text-[11px] text-emerald-600 font-semibold mt-2 inline-block">Explorar sección ➔</span>
+                                        </div>
+                                    </Link>
+                                );
+                            })}
+                        </div>
 
-                        {promotions.length > 1 && (
-                            <div className="absolute bottom-3 right-6 z-20 flex gap-1.5 bg-black/30 px-3 py-1 rounded-full backdrop-blur-xs">
-                                {promotions.map((_, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={() => setCurrentPromo(idx)}
-                                        className={`h-1.5 rounded-full transition-all ${idx === currentPromo ? 'w-6 bg-amber-400' : 'w-1.5 bg-white/60'}`}
-                                        aria-label={`Promo ${idx + 1}`}
-                                    />
-                                ))}
-                            </div>
-                        )}
+                        <button
+                            onClick={() => scrollCategorias('right')}
+                            className="absolute right-[-16px] top-1/2 -translate-y-1/2 z-20 bg-white border border-stone-200 hover:bg-emerald-50 text-stone-800 w-11 h-11 rounded-full shadow-md transition flex items-center justify-center font-bold cursor-pointer text-base"
+                            aria-label="Siguiente"
+                        >
+                            ❯
+                        </button>
                     </div>
                 </section>
             )}
 
-            {/* 4. SECCIÓN DE PRODUCTOS */}
+            {/* 3. BARRA DE BENEFICIOS Y CONFIANZA DINÁMICA */}
+            <section className="max-w-7xl w-full mx-auto px-6 py-6 shrink-0">
+                <div className="bg-white rounded-2xl p-6 border border-stone-200/80 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-6 items-center divide-y md:divide-y-0 md:divide-x divide-stone-100">
+                    {/* Tramo 1: Medios de Pago */}
+                    {(() => {
+                        const item = bannersBeneficios.find((b: any) => b.titulo === 'Medios de Pago');
+                        return (
+                            <div className="flex items-center gap-4 pt-4 md:pt-0">
+                                <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0 text-emerald-700 font-bold text-lg overflow-hidden">
+                                    {item?.imagenUrl ? <img src={item.imagenUrl} alt="" className="w-full h-full object-cover" /> : <span>{item?.badge || '💳'}</span>}
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black text-stone-900 uppercase tracking-wide">{item?.titulo || 'Medios de pago'}</h4>
+                                    <p className="text-[11px] text-stone-500 font-medium">{item?.subtitulo || 'Tarjetas, efectivo y transferencias.'}</p>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Tramo 2: Contactanos */}
+                    {(() => {
+                        const item = bannersBeneficios.find((b: any) => b.titulo === 'Contactanos');
+                        return (
+                            <div className="flex items-center gap-4 pt-4 md:pt-0 md:pl-6">
+                                <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0 text-emerald-700 font-bold text-lg overflow-hidden">
+                                    {item?.imagenUrl ? <img src={item.imagenUrl} alt="" className="w-full h-full object-cover" /> : <span>{item?.badge || '📞'}</span>}
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black text-stone-900 uppercase tracking-wide">{item?.titulo || 'Contactanos'}</h4>
+                                    <p className="text-[11px] text-stone-500 font-medium">{item?.subtitulo || 'Asesoramiento al 11-4078-2378'}</p>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Tramo 3: Envíos Programados */}
+                    {(() => {
+                        const item = bannersBeneficios.find((b: any) => b.titulo === 'Envíos Programados');
+                        return (
+                            <div className="flex items-center gap-4 pt-4 md:pt-0 md:pl-6">
+                                <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0 text-emerald-700 font-bold text-lg overflow-hidden">
+                                    {item?.imagenUrl ? <img src={item.imagenUrl} alt="" className="w-full h-full object-cover" /> : <span>{item?.badge || '🚚'}</span>}
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black text-stone-900 uppercase tracking-wide">{item?.titulo || 'Envíos Programados'}</h4>
+                                    <p className="text-[11px] text-stone-500 font-medium">{item?.subtitulo || 'Entregas programables en la zona.'}</p>
+                                </div>
+                            </div>
+                        );
+                    })()}
+                </div>
+            </section>
+
+            {/* 4. SECCIÓN DE PROMOCIONES Y OFERTAS VIGENTES */}
+            {(promotions.length > 0 || bannersPromos.length > 0) && (
+                <section className="max-w-7xl w-full mx-auto px-6 py-8 shrink-0 space-y-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <div>
+                            <h2 className="text-xl font-black text-stone-900 tracking-tight flex items-center gap-2">
+                                🔥 Promociones y Ofertas Imperdibles
+                            </h2>
+                            <p className="text-xs text-stone-500 mt-0.5">Beneficios exclusivos y descuentos especiales de temporada</p>
+                        </div>
+                    </div>
+
+                    <div className="relative group bg-stone-100/80 border border-stone-200/60 rounded-3xl p-6 shadow-xs">
+                        <button
+                            onClick={() => scrollPromos('left')}
+                            className="absolute left-[-16px] top-1/2 -translate-y-1/2 z-20 bg-white border border-stone-200 hover:bg-emerald-50 text-stone-800 w-11 h-11 rounded-full shadow-md transition flex items-center justify-center font-bold cursor-pointer text-base"
+                            aria-label="Anterior"
+                        >
+                            ❮
+                        </button>
+
+                        <div
+                            ref={promosScrollRef}
+                            className="flex gap-5 overflow-x-auto pb-4 pt-1 no-scrollbar scroll-smooth px-2"
+                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                        >
+                            {/* Banners de Promociones del CMS */}
+                            {bannersPromos.map((bp: any) => (
+                                <div
+                                    key={`banner-${bp.id}`}
+                                    className="relative rounded-2xl overflow-hidden shadow-sm border border-stone-200 p-4 text-white bg-stone-900 flex flex-col justify-between min-w-[280px] max-w-[280px] h-44 shrink-0 transition-all hover:shadow-md"
+                                    style={{ backgroundImage: `url(${bp.imagenUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-0"></div>
+                                    <div className="relative z-10 space-y-1">
+                                        {bp.badge && <span className="bg-amber-400 text-stone-900 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">{bp.badge}</span>}
+                                        <h3 className="text-sm font-black leading-snug">{bp.titulo}</h3>
+                                        {bp.subtitulo && <p className="text-[11px] text-stone-200 line-clamp-1">{bp.subtitulo}</p>}
+                                    </div>
+                                    <div className="relative z-10 pt-2 mt-auto">
+                                        <button
+                                            onClick={() => handleOpenPromoModal({
+                                                id: bp.id,
+                                                titulo: bp.titulo,
+                                                descripcion: bp.subtitulo,
+                                                imagenUrl: bp.imagenUrl,
+                                                badge: bp.badge || 'PROMO'
+                                            })}
+                                            className="bg-amber-400 hover:bg-amber-500 text-stone-900 font-bold text-[11px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-md transition cursor-pointer w-full text-center"
+                                        >
+                                            Aprovechar ➔
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {/* Promociones Activas de la Base de Datos */}
+                            {promotions.map((promo, idx) => {
+                                const gradientClass = PROMO_GRADIENTS[idx % PROMO_GRADIENTS.length];
+
+                                return (
+                                    <div
+                                        key={`promo-${promo.id}`}
+                                        className={`relative rounded-2xl overflow-hidden shadow-sm border border-stone-200 p-4 text-white flex flex-col justify-between min-w-[280px] max-w-[280px] h-44 shrink-0 transition-all hover:shadow-md ${!promo.imagenUrl ? `bg-gradient-to-br ${gradientClass}` : 'bg-stone-900'}`}
+                                        style={
+                                            promo.imagenUrl
+                                                ? {
+                                                    backgroundImage: `url(${promo.imagenUrl})`,
+                                                    backgroundSize: 'cover',
+                                                    backgroundPosition: 'center',
+                                                }
+                                                : undefined
+                                        }
+                                    >
+                                        {promo.imagenUrl && (
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/50 to-black/20 z-0"></div>
+                                        )}
+
+                                        <div className="relative z-10 space-y-1">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="bg-amber-400 text-stone-900 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                    {promo.badge || 'Oferta'}
+                                                </span>
+                                                {promo.stock !== undefined && (
+                                                    <span className="bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-full backdrop-blur-xs">
+                                                        📦 Quedan: {promo.stock}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <h3 className="text-sm font-black tracking-tight leading-snug drop-shadow">{promo.titulo}</h3>
+                                            {promo.descripcion && (
+                                                <p className="text-[11px] text-stone-200 line-clamp-1 drop-shadow">{promo.descripcion}</p>
+                                            )}
+                                        </div>
+
+                                        <div className="relative z-10 pt-2 flex items-center justify-between border-t border-white/10 mt-auto">
+                                            <span className="text-[10px] text-amber-300 font-bold">
+                                                {promo.hasta ? '⏱️ Limitado' : '✨ Exclusivo'}
+                                            </span>
+
+                                            <button
+                                                onClick={() => handleOpenPromoModal(promo)}
+                                                className="bg-amber-400 hover:bg-amber-500 text-stone-900 font-bold text-[11px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-md transition cursor-pointer"
+                                            >
+                                                Aprovechar ➔
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <button
+                            onClick={() => scrollPromos('right')}
+                            className="absolute right-[-16px] top-1/2 -translate-y-1/2 z-20 bg-white border border-stone-200 hover:bg-emerald-50 text-stone-800 w-11 h-11 rounded-full shadow-md transition flex items-center justify-center font-bold cursor-pointer text-base"
+                            aria-label="Siguiente"
+                        >
+                            ❯
+                        </button>
+                    </div>
+                </section>
+            )}
+
+            {/* 5. SECCIÓN DE PRODUCTOS DESTACADOS / FILTRADOS */}
             <section className="max-w-7xl w-full mx-auto px-6 py-8 shrink-0">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-stone-200 pb-3 gap-3">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 border-b border-stone-200 pb-3 gap-4">
                     <div>
                         <div className="flex items-center gap-2">
                             <h2 className="text-xl font-black text-stone-900 tracking-tight">
@@ -541,15 +657,21 @@ function TiendaContent() {
                                 </Link>
                             )}
                         </div>
-                        <p className="text-xs text-stone-500">
+                        <p className="text-xs text-stone-500 mt-0.5">
                             {categoriaSeleccionada ? `Mostrando artículos para ${categoriaSeleccionada}` : 'Selección especial de especies destacadas de la temporada'}
                         </p>
                     </div>
+
                     {!categoriaSeleccionada && (
-                        <Link href="/tienda/catalogo" className="text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-xl transition shadow-xs">
-                            Ver catálogo completo ➔
-                        </Link>
+                        /* { */
+                        <div className="pt-2 md:pt-0">
+                            <Link href="/tienda/catalogo" className="text-[11px] font-bold bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2 rounded-xl transition shadow-xs inline-flex items-center gap-1">
+                                Ver catálogo completo ➔
+                            </Link>
+                        </div>
+                        /* } */
                     )}
+
                 </div>
 
                 {productosFiltrados.length === 0 ? (
@@ -572,22 +694,28 @@ function TiendaContent() {
                 )}
             </section>
 
-            {/* 5 y 6. SECCIÓN AGRUPADA: QUIÉNES SOMOS Y UBICACIÓN CON GOOGLE MAPS */}
+            {/* 6. SECCIÓN INSTITUCIONAL Y UBICACIÓN */}
             <section className="max-w-7xl w-full mx-auto px-6 py-8 shrink-0">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-                    <div className="bg-emerald-900 text-white rounded-3xl p-8 md:p-10 shadow-xl relative overflow-hidden flex flex-col justify-between">
-                        <div className="absolute right-0 bottom-0 opacity-10 translate-x-10 translate-y-10">
-                            <Sparkles className="w-80 h-80" />
-                        </div>
+                    <div
+                        className="rounded-3xl p-8 md:p-10 shadow-xl relative overflow-hidden flex flex-col justify-between text-white"
+                        style={bannersInstitucional.length > 0 && bannersInstitucional[0].imagenUrl ? {
+                            backgroundImage: `url(${bannersInstitucional[0].imagenUrl})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center'
+                        } : { backgroundColor: '#064e3b' }}
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/90 via-emerald-900/85 to-stone-950/95 z-0"></div>
+
                         <div className="relative z-10 space-y-4">
-                            <span className="bg-emerald-800 text-emerald-200 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                                🌱 Nuestra Pasión
+                            <span className="bg-emerald-800/90 text-emerald-200 text-xs font-extrabold px-3.5 py-1.5 rounded-full uppercase tracking-wider inline-block border border-emerald-700/50 shadow-xs">
+                                {bannersInstitucional.length > 0 ? (bannersInstitucional[0].badge || '🌱 Nuestra Pasión') : '🌱 Nuestra Pasión'}
                             </span>
-                            <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-                                ¿Quiénes Somos?
+                            <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight drop-shadow-md">
+                                {bannersInstitucional.length > 0 ? bannersInstitucional[0].titulo : '¿Quiénes Somos?'}
                             </h2>
-                            <p className="text-emerald-100 text-xs md:text-sm leading-relaxed">
-                                En <strong className="text-white">Tienda de Plantas</strong> nos dedicamos con amor y profesionalismo al cultivo, comercialización y asesoramiento de especies de interior y exterior. Nuestro objetivo es llevar vida, color y naturaleza a cada rincón de tu hogar, brindándote la mejor atención y accesorios para que tu jardín luzca increíble.
+                            <p className="text-emerald-100 text-xs md:text-sm leading-relaxed drop-shadow font-medium">
+                                {bannersInstitucional.length > 0 ? bannersInstitucional[0].subtitulo : 'En Tienda de Plantas nos dedicamos con amor y profesionalismo al cultivo, comercialización y asesoramiento de especies de interior y exterior.'}
                             </p>
                         </div>
                         <div className="pt-6 relative z-10">
@@ -595,7 +723,7 @@ function TiendaContent() {
                                 href={`https://wa.me/${WHATSAPP_NUMBER}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition shadow-xs border border-emerald-600"
+                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md border border-emerald-500/50"
                             >
                                 Contactar por Asesoramiento ➔
                             </a>
@@ -617,7 +745,7 @@ function TiendaContent() {
                         <div className="w-full h-44 rounded-2xl overflow-hidden border border-stone-200 relative bg-stone-100">
                             <iframe
                                 title="Ubicación Tienda de Plantas"
-                                src="https://maps.google.com/maps?q=Pedro+Mascagni+316,+1832,+Lomas+de+Zamora,+Buenos+Aires&t=&z=15&ie=UTF8&iwloc=&output=embed"
+                                src="https://maps.google.com/maps?q=Pedro+Mascagni+316,+1832,+Lomas+de+Zamora,+Buenos+Aires&t=&z=15&ie=URL&iwloc=&output=embed"
                                 width="100%"
                                 height="100%"
                                 style={{ border: 0 }}
@@ -848,10 +976,10 @@ function TiendaContent() {
                                 <span>Esta promoción se ha agotado por completo.</span>
                             </div>
                         ) : customer ? (
-                            <div className="space-y-3 pt-2 border-t border-slate-100">
-                                <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-200/60 flex items-center gap-2">
+                            <div className="space-y-3 pt-2 border-t border-stone-100">
+                                <div className="text-[11px] text-stone-500 bg-stone-50 p-2 rounded-xl border border-stone-200/60 flex items-center gap-2">
                                     <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                                    <span>Conectado como: <strong className="text-slate-700">{customer.name || customer.email}</strong></span>
+                                    <span>Conectado como: <strong className="text-stone-700">{customer.name || customer.email}</strong></span>
                                 </div>
 
                                 {!claimSuccess ? (
@@ -874,11 +1002,11 @@ function TiendaContent() {
                                 )}
                             </div>
                         ) : (
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center space-y-3 pt-2 border-t">
-                                <p className="text-xs text-slate-600">Iniciá sesión para guardar esta promoción en tu perfil.</p>
+                            <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 text-center space-y-3 pt-2 border-t">
+                                <p className="text-xs text-stone-600">Iniciá sesión para guardar esta promoción en tu perfil.</p>
                                 <button
                                     onClick={handleRedirectLogin}
-                                    className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
+                                    className="w-full bg-stone-900 hover:bg-stone-800 text-white py-2.5 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
                                 >
                                     Iniciar Sesión / Registrarse ➔
                                 </button>
