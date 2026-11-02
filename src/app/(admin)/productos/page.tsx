@@ -1,11 +1,15 @@
 'use client';
 
+// src/app/(admin)/productos/page.tsx
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Product, Category, Supplier, SortField, SortOrder } from '@/types/product';
+import { Product, Category, Supplier } from '@/types/product';
+import ModalListadoProductos from '@/components/ModalListadoProductos';
+import { useRouter } from 'next/navigation';
 
 import {
     getCategories,
     createCategory,
+    updateCategory,
     getSuppliers,
     createSupplier,
     getProducts,
@@ -15,10 +19,6 @@ import {
     importProductsBatch,
     adjustStock
 } from '@/actions/product-actions';
-
-// ----------------------------------------------------------------------
-// COMPONENTE AUXILIAR INLINE (Proveedor)
-// ----------------------------------------------------------------------
 
 function SupplierInlineForm({
     initialName = '',
@@ -85,10 +85,6 @@ function SupplierInlineForm({
         </div>
     );
 }
-
-// ----------------------------------------------------------------------
-// COMPONENTE AUXILIAR INLINE (Categoría)
-// ----------------------------------------------------------------------
 
 function CategoryInlineForm({
     initialName = '',
@@ -158,25 +154,23 @@ function CategoryInlineForm({
     );
 }
 
-// ----------------------------------------------------------------------
-// COMPONENTE PRINCIPAL
-// ----------------------------------------------------------------------
-
 export default function ProductosPage() {
+    const router = useRouter();
     const [fechaActual, setFechaActual] = useState('');
-    const [tabActiva, setTabActiva] = useState('catalogo');
-
     const MAX_FILE_SIZE = 2 * 1024 * 1024;
+
+    const [customMargin, setCustomMargin] = useState(false);
+    const [isFormUnlocked, setIsFormUnlocked] = useState(false); // 👈 Controla si el formulario está desbloqueado
 
     const [categories, setCategories] = useState<Category[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const [showProductForm, setShowProductForm] = useState(false);
     const [showCategoryPanel, setShowCategoryPanel] = useState(false);
     const [showSupplierPanel, setShowSupplierPanel] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
+    const [showModalListado, setShowModalListado] = useState(false);
 
     const [showStockModal, setShowStockModal] = useState(false);
     const [selectedProductForStock, setSelectedProductForStock] = useState<Product | null>(null);
@@ -191,6 +185,11 @@ export default function ProductosPage() {
     const [supFormData, setSupFormData] = useState({ name: '', phone: '', address: '' });
     const [catPanelError, setCatPanelError] = useState<string | null>(null);
     const [supPanelError, setSupPanelError] = useState<string | null>(null);
+
+    // Estados de edición de categorías en el panel desplegable
+    const [editingCatId, setEditingCatId] = useState<string | null>(null);
+    const [editCatName, setEditCatName] = useState('');
+    const [editCatMargin, setEditCatMargin] = useState<number | ''>(100);
 
     const [id, setId] = useState<string | null>(null);
     const [code, setCode] = useState('');
@@ -213,17 +212,12 @@ export default function ProductosPage() {
     const [imageUrl, setImageUrl] = useState('');
     const [imageError, setImageError] = useState<string | null>(null);
 
-    // NUEVO ESTADO: destacado
     const [destacado, setDestacado] = useState(false);
+    const [color, setColor] = useState('');
+    const [tamano, setTamano] = useState('');
+    const [stockWeb, setStockWeb] = useState<number | ''>(0);
 
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-    const [sortField, setSortField] = useState<SortField>('name');
-    const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(10);
-
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importing, setImporting] = useState(false);
 
@@ -233,12 +227,7 @@ export default function ProductosPage() {
 
     useEffect(() => {
         const hoy = new Date();
-        const opciones: Intl.DateTimeFormatOptions = {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        };
+        const opciones: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         const fechaStr = hoy.toLocaleDateString('es-AR', opciones);
         setFechaActual(fechaStr.charAt(0).toUpperCase() + fechaStr.slice(1));
 
@@ -259,10 +248,6 @@ export default function ProductosPage() {
         }
     }, [message]);
 
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm, itemsPerPage]);
-
     const resumenProductos = useMemo(() => {
         const totalNeto = products.reduce((acc, p) => acc + (p.price * p.stock), 0);
         const totalImpuestos = products.reduce((acc, p) => acc + ((p.price - (p.price / (1 + (p.taxRate / 100)))) * p.stock), 0);
@@ -281,6 +266,7 @@ export default function ProductosPage() {
         setCatFormData({ name: '', defaultMargin: 100 });
         setSupFormData({ name: '', phone: '', address: '' });
         setSupPanelError(null);
+        setEditingCatId(null);
     };
 
     const resetProductForm = () => {
@@ -294,13 +280,18 @@ export default function ProductosPage() {
         setCost('');
         setOtherCosts('');
         setMargin(100);
+        setCustomMargin(false);
         setPriceFinal(0);
         setTaxRate(21);
         setStock(0);
         setMinStock(2);
         setImageUrl('');
         setImageError(null);
-        setDestacado(false); // RESET DE DESTACADO
+        setDestacado(false);
+        setColor('');
+        setTamano('');
+        setStockWeb(0);
+        setIsFormUnlocked(false); // 👈 Bloquea / grisá el formulario de nuevo
     };
 
     const loadData = async () => {
@@ -347,10 +338,7 @@ export default function ProductosPage() {
         }
 
         try {
-            const res = await createCategory({
-                name: cleanName,
-                defaultMargin: Number(catFormData.defaultMargin) || 0
-            });
+            const res = await createCategory({ name: cleanName, defaultMargin: Number(catFormData.defaultMargin) || 0 });
             if (res.error) {
                 setCatPanelError(res.error);
             } else if (res.category) {
@@ -373,11 +361,7 @@ export default function ProductosPage() {
         }
 
         try {
-            const res = await createSupplier({
-                name: cleanName,
-                phone: supFormData.phone,
-                address: supFormData.address
-            });
+            const res = await createSupplier({ name: cleanName, phone: supFormData.phone, address: supFormData.address });
             if (res.error) {
                 setSupPanelError(res.error);
             } else if (res.supplier) {
@@ -396,8 +380,11 @@ export default function ProductosPage() {
             setCategoryId(cat.id);
             setCategorySearch(cat.name);
             setShowCatDropdown(false);
-            setMargin(cat.defaultMargin ?? 100);
-            computePrices(Number(cost), Number(otherCosts), cat.defaultMargin ?? 100, taxRate);
+
+            if (!customMargin) {
+                setMargin(cat.defaultMargin ?? 100);
+                computePrices(Number(cost), Number(otherCosts), cat.defaultMargin ?? 100, taxRate);
+            }
 
             const nextCode = await generateNextProductCode(cat.id);
             setCode(nextCode);
@@ -406,7 +393,7 @@ export default function ProductosPage() {
         }
     };
 
-    const handleEditProduct = (prod: Product) => {
+    const handleEditProduct = (prod: any) => {
         setId(prod.id);
         setCode(prod.code);
         setName(prod.name);
@@ -417,17 +404,21 @@ export default function ProductosPage() {
         setCost(prod.cost);
         setOtherCosts(prod.otherCosts);
         setMargin(prod.margin);
+        setCustomMargin(prod.customMargin || false);
         setTaxRate(prod.taxRate);
         setPriceFinal(prod.price);
         setStock(prod.stock);
         setMinStock(prod.minStock);
         setImageUrl(prod.imageUrl || '');
         setImageError(null);
-        setDestacado(prod.destacado || false); // CARGA DE DESTACADO
+        setDestacado(prod.destacado || false);
+        setColor(prod.color || '');
+        setTamano(prod.tamano || '');
+        setStockWeb(prod.stockWeb !== undefined ? prod.stockWeb : prod.stock);
+        setIsFormUnlocked(true); // 👈 Desbloquea el formulario al editar un producto
 
-        setShowProductForm(true);
         setTimeout(() => {
-            formRef.current?.scrollIntoView({ behavior: 'smooth' });
+            window.scrollTo({ top: 120, behavior: 'smooth' });
         }, 100);
     };
 
@@ -476,9 +467,7 @@ export default function ProductosPage() {
 
         setImageError(null);
         const reader = new FileReader();
-        reader.onloadend = () => {
-            setImageUrl(reader.result as string);
-        };
+        reader.onloadend = () => { setImageUrl(reader.result as string); };
         reader.readAsDataURL(file);
     };
 
@@ -486,7 +475,6 @@ export default function ProductosPage() {
         if (!selectedProductForStock) return 0;
         const current = selectedProductForStock.stock;
         const qty = Number(stockQuantityInput) || 0;
-
         if (stockAdjustmentType === 'IN') return current + qty;
         if (stockAdjustmentType === 'OUT') return Math.max(0, current - qty);
         if (stockAdjustmentType === 'ADJUSTMENT') return qty;
@@ -498,24 +486,12 @@ export default function ProductosPage() {
             setMessage({ type: 'error', text: 'No hay productos para exportar.' });
             return;
         }
-
         const headers = ['Codigo', 'Nombre', 'Categoria', 'Proveedor', 'CostoBase', 'FleteOtros', 'Margen', 'IVA', 'PrecioFinal', 'Stock', 'StockMinimo', 'Destacado', 'ImagenUrl'];
         const rows = products.map(p => [
-            `"${p.code || ''}"`,
-            `"${p.name || ''}"`,
-            `"${p.category?.name || ''}"`,
-            `"${p.supplier?.name || ''}"`,
-            p.cost || 0,
-            p.otherCosts || 0,
-            p.margin || 0,
-            p.taxRate || 0,
-            p.price || 0,
-            p.stock || 0,
-            p.minStock || 0,
-            p.destacado ? 'SI' : 'NO',
-            `"${p.imageUrl || ''}"`
+            `"${p.code || ''}"`, `"${p.name || ''}"`, `"${p.category?.name || ''}"`, `"${p.supplier?.name || ''}"`,
+            p.cost || 0, p.otherCosts || 0, p.margin || 0, p.taxRate || 0, p.price || 0, p.stock || 0, p.minStock || 0,
+            p.destacado ? 'SI' : 'NO', `"${p.imageUrl || ''}"`
         ]);
-
         const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement('a');
@@ -532,34 +508,22 @@ export default function ProductosPage() {
             setMessage({ type: 'error', text: 'Por favor, selecciona un archivo CSV o JSON.' });
             return;
         }
-
         setImporting(true);
         try {
             const text = await importFile.text();
             let rawData: any[] = [];
-
             if (importFile.name.endsWith('.json')) {
                 rawData = JSON.parse(text);
             } else if (importFile.name.endsWith('.csv')) {
                 const lines = text.split('\n').filter(l => l.trim() !== '');
                 const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-
                 rawData = lines.slice(1).map(line => {
                     const values = line.split(',').map(v => v.replace(/"/g, '').trim());
                     const obj: any = {};
-                    headers.forEach((header, index) => {
-                        obj[header] = values[index];
-                    });
+                    headers.forEach((header, index) => { obj[header] = values[index]; });
                     return obj;
                 });
             }
-
-            if (rawData.length === 0) {
-                setMessage({ type: 'error', text: 'El archivo está vacío o no tiene un formato válido.' });
-                setImporting(false);
-                return;
-            }
-
             const res = await importProductsBatch(rawData);
             if (res.error) {
                 setMessage({ type: 'error', text: res.error });
@@ -570,77 +534,23 @@ export default function ProductosPage() {
                 loadData();
             }
         } catch {
-            setMessage({ type: 'error', text: 'Error al procesar el archivo. Verifique la estructura de los datos.' });
+            setMessage({ type: 'error', text: 'Error al procesar el archivo.' });
         } finally {
             setImporting(false);
         }
     };
 
-    const handleSort = (field: SortField) => {
-        if (sortField === field) {
-            setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
-        } else {
-            setSortField(field);
-            setSortOrder('asc');
-        }
-    };
-
-    const filteredAndSortedProducts = useMemo(() => {
-        const query = searchTerm.toLowerCase().trim();
-
-        return products
-            .filter(p => {
-                const cumpleTab = tabActiva === 'catalogo' || (tabActiva === 'alertas' && p.stock <= p.minStock);
-                if (!cumpleTab) return false;
-                if (!query) return true;
-                const matchName = p.name.toLowerCase().includes(query);
-                const matchCode = p.code.toLowerCase().includes(query);
-                const matchCat = p.category?.name.toLowerCase().includes(query) ?? false;
-                return matchName || matchCode || matchCat;
-            })
-            .sort((a, b) => {
-                let valA: any = '';
-                let valB: any = '';
-
-                if (sortField === 'name') {
-                    valA = a.name.toLowerCase();
-                    valB = b.name.toLowerCase();
-                } else if (sortField === 'category') {
-                    valA = (a.category?.name || '').toLowerCase();
-                    valB = (b.category?.name || '').toLowerCase();
-                } else if (sortField === 'code') {
-                    valA = a.code.toLowerCase();
-                    valB = b.code.toLowerCase();
-                } else if (sortField === 'price') {
-                    valA = a.price;
-                    valB = b.price;
-                } else if (sortField === 'stock') {
-                    valA = a.stock;
-                    valB = b.stock;
-                }
-
-                if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-                if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-                return 0;
-            });
-    }, [products, searchTerm, sortField, sortOrder, tabActiva]);
-
-    const totalItems = filteredAndSortedProducts.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedProducts = filteredAndSortedProducts.slice(startIndex, startIndex + itemsPerPage);
-
     const filteredCats = categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()));
     const filteredSups = suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
 
     return (
-        <div className="w-full min-h-[calc(100vh-4rem)] flex flex-col font-sans text-slate-800 pb-4 max-w-7xl mx-auto">
-            <div className="bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6 space-y-4">
+        <div className="w-full min-h-[calc(100vh-3.5rem)] flex flex-col font-sans text-slate-800 pb-2 max-w-7xl mx-auto">
+            <div className="bg-stone-100 rounded-2xl border border-slate-200/80 shadow-sm p-3 md:p-4 space-y-2.5">
 
-                {/* ENCABEZADO Y ACCIONES */}
+                {/* ENCABEZADO Y ACCIONES PRINCIPALES */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center px-0.5 gap-1 shrink-0">
                     <div>
-                        <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+                        <h1 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
                             <span>📦</span> Catálogo de Productos & Gestión Comercial
                         </h1>
                         <p className="text-[9px] text-slate-500 font-medium">
@@ -651,9 +561,16 @@ export default function ProductosPage() {
                     <div className="flex flex-wrap gap-1.5">
                         <button
                             type="button"
+                            onClick={() => setShowModalListado(true)}
+                            className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold rounded shadow-2xs flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                            📋 Ver Listado ({products.length})
+                        </button>
+
+                        <button
+                            type="button"
                             onClick={handleExportCSV}
-                            className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-[10px] font-semibold rounded shadow-2xs flex items-center gap-1 transition-colors cursor-pointer"
-                            title="Exportar a CSV"
+                            className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-[10px] font-semibold rounded shadow-2xs flex items-center gap-1 cursor-pointer"
                         >
                             📥 Exportar
                         </button>
@@ -661,75 +578,72 @@ export default function ProductosPage() {
                         <button
                             type="button"
                             onClick={() => setShowImportModal(true)}
-                            className="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 text-[10px] font-semibold rounded shadow-2xs flex items-center gap-1 transition-colors cursor-pointer"
+                            className="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 text-[10px] font-semibold rounded shadow-2xs flex items-center gap-1 cursor-pointer"
                         >
                             📤 Importar
                         </button>
 
-                        <div className="h-5 w-px bg-slate-300 mx-0.5 hidden sm:block"></div>
+                        <div className="h-4 w-px bg-slate-300 mx-0.5 hidden sm:block"></div>
 
                         <button
                             type="button"
                             onClick={() => { resetPanels(); setShowCategoryPanel(!showCategoryPanel); setShowSupplierPanel(false); }}
-                            className={`px-2.5 py-1 text-[10px] font-semibold rounded border transition-all cursor-pointer ${showCategoryPanel ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                            className={`px-2 py-1 text-[10px] font-semibold rounded border transition-all cursor-pointer ${showCategoryPanel ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
                         >
-                            {showCategoryPanel ? '✕ Cerrar' : '🏷️ Categoría'}
+                            {showCategoryPanel ? '✕ Categoría' : '🏷️ Categoría'}
                         </button>
                         <button
                             type="button"
                             onClick={() => { resetPanels(); setShowSupplierPanel(!showSupplierPanel); setShowCategoryPanel(false); }}
-                            className={`px-2.5 py-1 text-[10px] font-semibold rounded border transition-all cursor-pointer ${showSupplierPanel ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                            className={`px-2 py-1 text-[10px] font-semibold rounded border transition-all cursor-pointer ${showSupplierPanel ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
                         >
-                            {showSupplierPanel ? '✕ Cerrar' : '🚚 Proveedor'}
+                            {showSupplierPanel ? '✕ Proveedor' : '🚚 Proveedor'}
                         </button>
+
+                        {/* BOTÓN NUEVO REGISTRO: Desbloquea el formulario */}
                         <button
                             type="button"
                             onClick={() => {
-                                if (showProductForm) {
-                                    setShowProductForm(false);
-                                    resetProductForm();
-                                } else {
-                                    resetProductForm();
-                                    setShowProductForm(true);
-                                }
+                                resetProductForm();
+                                setIsFormUnlocked(true);
                             }}
-                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded shadow-2xs transition-colors cursor-pointer"
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded shadow-2xs transition-colors cursor-pointer"
                         >
-                            {showProductForm ? '✕ Cerrar' : '+ Nuevo Producto'}
+                            + Nuevo Registro
                         </button>
                     </div>
                 </div>
 
-                {/* TARJETAS DE RESUMEN MÉTRICAS */}
+                {/* TARJETAS DE RESUMEN MÉTRICAS COMPACTAS */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
-                    <div className="bg-white/90 backdrop-blur-xs p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
-                        <div className="p-1.5 bg-slate-100 rounded text-sm">📦</div>
+                    <div className="bg-white/90 p-1.5 px-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2">
+                        <div className="p-1 bg-slate-100 rounded text-xs">📦</div>
                         <div>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">Items Registrados</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Items Registrados</p>
                             <p className="text-xs font-black text-slate-900">{resumenProductos.itemsRegistrados}</p>
                         </div>
                     </div>
 
-                    <div className="bg-white/90 backdrop-blur-xs p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
-                        <div className="p-1.5 bg-emerald-50 text-emerald-700 rounded text-sm">💵</div>
+                    <div className="bg-white/90 p-1.5 px-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2">
+                        <div className="p-1 bg-emerald-50 text-emerald-700 rounded text-xs">💵</div>
                         <div>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">Valor Neto Stock</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Valor Neto Stock</p>
                             <p className="text-xs font-black text-slate-900">{resumenProductos.valorNetoStock}</p>
                         </div>
                     </div>
 
-                    <div className="bg-white/90 backdrop-blur-xs p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
-                        <div className="p-1.5 bg-slate-100 rounded text-sm">📄</div>
+                    <div className="bg-white/90 p-1.5 px-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2">
+                        <div className="p-1 bg-slate-100 rounded text-xs">📄</div>
                         <div>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">Impuestos Implícitos</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Impuestos Implícitos</p>
                             <p className="text-xs font-black text-slate-900">{resumenProductos.impuestosImplicitos}</p>
                         </div>
                     </div>
 
-                    <div className="bg-white/90 backdrop-blur-xs p-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2.5">
-                        <div className="p-1.5 bg-amber-50 text-amber-700 rounded text-sm">⚠️</div>
+                    <div className="bg-white/90 p-1.5 px-2 rounded-md border border-slate-200/80 shadow-2xs flex items-center gap-2">
+                        <div className="p-1 bg-amber-50 text-amber-700 rounded text-xs">⚠️</div>
                         <div>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">Alertas Reposición</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Alertas Reposición</p>
                             <p className="text-xs font-black text-amber-600">{resumenProductos.alertasReposicion} items</p>
                         </div>
                     </div>
@@ -737,11 +651,8 @@ export default function ProductosPage() {
 
                 {/* NOTIFICACIONES */}
                 {message && (
-                    <div className={`p-2.5 rounded-md text-[11px] font-medium flex justify-between items-center transition-all shrink-0 ${message.type === 'success'
-                        ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 shadow-2xs'
-                        : 'bg-rose-50 text-rose-900 border border-rose-300 shadow-2xs'
-                        }`}>
-                        <div className="flex items-center gap-2">
+                    <div className={`p-2 rounded-md text-[10px] font-medium flex justify-between items-center transition-all shrink-0 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-900 border border-emerald-300' : 'bg-rose-50 text-rose-900 border border-rose-300'}`}>
+                        <div className="flex items-center gap-1.5">
                             <span>{message.type === 'success' ? '✅' : '⚠️'}</span>
                             <span className="font-semibold">{message.text}</span>
                         </div>
@@ -749,822 +660,461 @@ export default function ProductosPage() {
                     </div>
                 )}
 
-                {/* PANELES INDEPENDIENTES */}
-                {/* ... (Paneles standalones permanecen igual) */}
+                {/* PANEL DE CATEGORÍAS CON LISTADO Y EDICIÓN INTEGRADA */}
                 {showCategoryPanel && (
-                    <div className="bg-slate-900 text-white p-3 rounded-md shadow-md border border-slate-700 animate-in fade-in space-y-2 shrink-0">
+                    <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg border border-slate-700 animate-in fade-in space-y-3 shrink-0">
                         <div className="flex justify-between items-center border-b border-slate-700 pb-1.5">
-                            <h3 className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                                <span>🏷️</span> Alta Standalone de Categoría
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                                <span>🏷️</span> Gestión y Alta de Categorías
                             </h3>
                             <button type="button" onClick={() => setShowCategoryPanel(false)} className="text-slate-400 hover:text-white font-bold cursor-pointer">✕</button>
                         </div>
-                        {catPanelError && <p className="text-[10px] text-rose-400 font-bold bg-rose-950/50 p-1.5 rounded border border-rose-800">⚠️ {catPanelError}</p>}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <div>
-                                <label className="block text-[8px] font-bold text-slate-300 uppercase mb-0.5">Nombre de Categoría *</label>
-                                <input
-                                    type="text"
-                                    placeholder="EJ. ARBUSTOS"
-                                    value={catFormData.name}
-                                    onChange={(e) => setCatFormData({ ...catFormData, name: e.target.value.toUpperCase() })}
-                                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white uppercase focus:outline-none focus:border-emerald-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[8px] font-bold text-slate-300 uppercase mb-0.5">Margen Predeterminado (%)</label>
-                                <input
-                                    type="number"
-                                    step="any"
-                                    placeholder="100"
-                                    value={catFormData.defaultMargin}
-                                    onChange={(e) => setCatFormData({ ...catFormData, defaultMargin: e.target.value === '' ? '' : Number(e.target.value) })}
-                                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white focus:outline-none focus:border-emerald-500"
-                                />
-                            </div>
+
+                        {catPanelError && <p className="text-[10px] text-rose-400 font-bold bg-rose-950/50 p-1.5 rounded">⚠️ {catPanelError}</p>}
+
+                        {/* FORMULARIO DE ALTA */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center bg-slate-800/60 p-2 rounded-lg border border-slate-700">
+                            <input
+                                type="text"
+                                placeholder="NOMBRE DE CATEGORÍA"
+                                value={catFormData.name}
+                                onChange={(e) => setCatFormData({ ...catFormData, name: e.target.value.toUpperCase() })}
+                                className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white uppercase focus:outline-none"
+                            />
+                            <input
+                                type="number"
+                                step="any"
+                                placeholder="MARGEN % PREDETERMINADO"
+                                value={catFormData.defaultMargin}
+                                onChange={(e) => setCatFormData({ ...catFormData, defaultMargin: e.target.value === '' ? '' : Number(e.target.value) })}
+                                className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white focus:outline-none"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleSaveCategoryStandalone}
+                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded shadow-xs transition-colors cursor-pointer"
+                            >
+                                + Registrar Categoría
+                            </button>
                         </div>
-                        <div className="flex justify-end gap-1.5 pt-1">
-                            <button type="button" onClick={() => setShowCategoryPanel(false)} className="px-2.5 py-1 text-[10px] text-slate-300 hover:text-white cursor-pointer">Cancelar</button>
-                            <button type="button" onClick={handleSaveCategoryStandalone} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded shadow-2xs cursor-pointer">Guardar</button>
+
+                        {/* LISTADO DE CATEGORÍAS EXISTENTES CON EDICIÓN */}
+                        <div className="space-y-1">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">Categorías Registradas ({categories.length}):</p>
+                            <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                                {categories.length > 0 ? (
+                                    categories.map((cat) => (
+                                        <div key={cat.id} className="bg-slate-800/80 p-2 rounded border border-slate-700/60 text-[10px] space-y-1.5">
+                                            {editingCatId === cat.id ? (
+                                                /* MODO EDICIÓN ACTIVO */
+                                                <div className="flex gap-1.5 items-center">
+                                                    <input
+                                                        type="text"
+                                                        value={editCatName}
+                                                        onChange={(e) => setEditCatName(e.target.value.toUpperCase())}
+                                                        className="flex-1 bg-slate-900 border border-emerald-500 rounded px-2 py-1 text-[10px] text-white font-bold uppercase focus:outline-none"
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        value={editCatMargin}
+                                                        onChange={(e) => setEditCatMargin(e.target.value === '' ? '' : Number(e.target.value))}
+                                                        className="w-20 bg-slate-900 border border-emerald-500 rounded px-2 py-1 text-[10px] text-white font-bold focus:outline-none"
+                                                        placeholder="Margen %"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={async () => {
+                                                            const cleanName = editCatName.trim().toUpperCase();
+                                                            if (!cleanName) {
+                                                                setCatPanelError('El nombre no puede estar vacío.');
+                                                                return;
+                                                            }
+                                                            try {
+                                                                const res = await updateCategory({ id: cat.id, name: cleanName, defaultMargin: Number(editCatMargin) || 0 });
+                                                                if (res.error) {
+                                                                    setCatPanelError(res.error);
+                                                                } else {
+                                                                    setMessage({ type: 'success', text: 'Categoría y precios actualizados con éxito.' });
+                                                                    loadData();
+                                                                    router.refresh();
+                                                                    setEditingCatId(null);
+                                                                }
+                                                            } catch {
+                                                                setCatPanelError('Error al actualizar la categoría.');
+                                                            }
+                                                        }}
+                                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2 py-1 rounded cursor-pointer"
+                                                        title="Guardar cambios"
+                                                    >
+                                                        ✓
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingCatId(null)}
+                                                        className="bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold px-2 py-1 rounded cursor-pointer"
+                                                        title="Cancelar"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                /* MODO VISTA NORMAL */
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-extrabold text-white">{cat.name}</span>
+                                                        <span className="text-[9px] bg-slate-700 text-emerald-300 px-1.5 py-0.5 rounded font-mono">
+                                                            Margen: {cat.defaultMargin}%
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setEditingCatId(cat.id);
+                                                                setEditCatName(cat.name);
+                                                                setEditCatMargin(cat.defaultMargin);
+                                                                setCatPanelError(null);
+                                                            }}
+                                                            className="text-sky-400 hover:text-sky-200 font-bold px-1.5 py-0.5 rounded bg-sky-950/40 hover:bg-sky-900/60 transition-colors cursor-pointer"
+                                                            title="Editar categoría"
+                                                        >
+                                                            ✏️ Editar
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                if (confirm(`¿Estás seguro de eliminar la categoría "${cat.name}"?`)) {
+                                                                    const res = await deleteCategory(cat.id);
+                                                                    if (res.error) {
+                                                                        setCatPanelError(res.error);
+                                                                    } else {
+                                                                        setMessage({ type: 'success', text: `Categoría "${cat.name}" eliminada correctamente.` });
+                                                                        setCategories(prev => prev.filter(c => c.id !== cat.id));
+                                                                    }
+                                                                }
+                                                            }}
+                                                            className="text-rose-400 hover:text-rose-200 font-bold px-1.5 py-0.5 rounded bg-rose-950/40 hover:bg-rose-900/60 transition-colors cursor-pointer"
+                                                            title="Eliminar categoría"
+                                                        >
+                                                            🗑️ Eliminar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-[10px] text-slate-500 text-center py-2">No hay categorías registradas.</p>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
 
                 {showSupplierPanel && (
-                    <div className="bg-slate-900 text-white p-3 rounded-md shadow-md border border-slate-700 animate-in fade-in space-y-2 shrink-0">
-                        <div className="flex justify-between items-center border-b border-slate-700 pb-1.5">
-                            <h3 className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                                <span>🚚</span> Alta Standalone de Proveedor
-                            </h3>
+                    <div className="bg-slate-900 text-white p-2.5 rounded-md shadow-md border border-slate-700 animate-in fade-in space-y-1.5 shrink-0">
+                        <div className="flex justify-between items-center border-b border-slate-700 pb-1">
+                            <h3 className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">🚚 Alta Standalone de Proveedor</h3>
                             <button type="button" onClick={() => setShowSupplierPanel(false)} className="text-slate-400 hover:text-white font-bold cursor-pointer">✕</button>
                         </div>
-                        {supPanelError && <p className="text-[10px] text-rose-400 font-bold bg-rose-950/50 p-1.5 rounded border border-rose-800">⚠️ {supPanelError}</p>}
+                        {supPanelError && <p className="text-[10px] text-rose-400 font-bold bg-rose-950/50 p-1 rounded">⚠️ {supPanelError}</p>}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <div>
-                                <label className="block text-[8px] font-bold text-slate-300 uppercase mb-0.5">Nombre / Razón Social *</label>
-                                <input
-                                    type="text"
-                                    placeholder="EJ. VIVERO CENTRAL"
-                                    value={supFormData.name}
-                                    onChange={(e) => setSupFormData({ ...supFormData, name: e.target.value.toUpperCase() })}
-                                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white uppercase focus:outline-none focus:border-emerald-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[8px] font-bold text-slate-300 uppercase mb-0.5">Teléfono Contacto</label>
-                                <input
-                                    type="text"
-                                    placeholder="11-XXXX-XXXX"
-                                    value={supFormData.phone}
-                                    onChange={(e) => setSupFormData({ ...supFormData, phone: e.target.value })}
-                                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white focus:outline-none focus:border-emerald-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[8px] font-bold text-slate-300 uppercase mb-0.5">Dirección / Localidad</label>
-                                <input
-                                    type="text"
-                                    placeholder="DIRECCIÓN"
-                                    value={supFormData.address}
-                                    onChange={(e) => setSupFormData({ ...supFormData, address: e.target.value.toUpperCase() })}
-                                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white uppercase focus:outline-none focus:border-emerald-500"
-                                />
-                            </div>
+                            <input type="text" placeholder="NOMBRE / RAZÓN SOCIAL" value={supFormData.name} onChange={(e) => setSupFormData({ ...supFormData, name: e.target.value.toUpperCase() })} className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white uppercase" />
+                            <input type="text" placeholder="TELÉFONO" value={supFormData.phone} onChange={(e) => setSupFormData({ ...supFormData, phone: e.target.value })} className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white" />
+                            <input type="text" placeholder="DIRECCIÓN" value={supFormData.address} onChange={(e) => setSupFormData({ ...supFormData, address: e.target.value.toUpperCase() })} className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white uppercase" />
                         </div>
-                        <div className="flex justify-end gap-1.5 pt-1">
-                            <button type="button" onClick={() => setShowSupplierPanel(false)} className="px-2.5 py-1 text-[10px] text-slate-300 hover:text-white cursor-pointer">Cancelar</button>
-                            <button type="button" onClick={handleSaveSupplierStandalone} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded shadow-2xs cursor-pointer">Guardar</button>
+                        <div className="flex justify-end gap-1 pt-1">
+                            <button type="button" onClick={() => setShowSupplierPanel(false)} className="px-2 py-0.5 text-[10px] text-slate-300 cursor-pointer">Cancelar</button>
+                            <button type="button" onClick={handleSaveSupplierStandalone} className="px-2.5 py-0.5 bg-emerald-600 text-white font-bold text-[10px] rounded cursor-pointer">Guardar</button>
                         </div>
                     </div>
                 )}
 
-                {/* FORMULARIO DE EDICIÓN Y ALTA DE PRODUCTO */}
-                {showProductForm && (
-                    <div ref={formRef} className="bg-stone-50 dark:bg-stone-900 p-6 rounded-xl shadow-md border border-stone-200 dark:border-stone-800">
-                        <div className="flex justify-between items-center border-b pb-1.5">
-                            <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                                <span>{id ? '✏️' : '🌱'}</span>
-                                {id ? `Editar Producto: ${name}` : 'Nuevo Producto en Catálogo'}
-                            </h3>
-                            <button type="button" onClick={() => { setShowProductForm(false); resetProductForm(); }} className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer">✕</button>
+                {/* FORMULARIO FIJO DE ALTA Y EDICIÓN DE PRODUCTO (Visible pero bloqueado/grisado si isFormUnlocked es false) */}
+                <div
+                    ref={formRef}
+                    className={`bg-white p-4 rounded-xl shadow-sm border border-stone-200 space-y-2.5 transition-all ${!isFormUnlocked ? 'opacity-50 bg-slate-50 pointer-events-none select-none' : ''}`}
+                >
+                    <div className="flex justify-between items-center border-b pb-1">
+                        <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                            <span>{id ? '✏️' : '🌱'}</span>
+                            {id ? `Editar Producto: ${name}` : 'Nuevo Producto en Catálogo'}
+                            {!isFormUnlocked && <span className="text-[9px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold ml-2">🔒 Bloqueado (Presione "+ Nuevo Registro")</span>}
+                        </h3>
+                        {isFormUnlocked && (
+                            <button type="button" onClick={resetProductForm} className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer pointer-events-auto">
+                                ✕ Cancelar / Bloquear
+                            </button>
+                        )}
+                    </div>
+
+                    <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!categoryId) { setMessage({ type: 'error', text: 'Debe seleccionar una categoría obligatoriamente.' }); return; }
+                        if (!name.trim()) { setMessage({ type: 'error', text: 'El nombre del producto no puede estar vacío.' }); return; }
+
+                        const res = await saveProduct({
+                            id: id || undefined,
+                            code,
+                            name: name.trim().toUpperCase(),
+                            categoryId,
+                            supplierId: supplierId || null,
+                            cost: Number(cost) || 0,
+                            otherCosts: Number(otherCosts) || 0,
+                            price: Number(priceFinal) || 0,
+                            margin: Number(margin) || 0,
+                            customMargin: Boolean(customMargin),
+                            taxRate: Number(taxRate) || 0,
+                            stock: Number(stock) || 0,
+                            minStock: Number(minStock) || 0,
+                            destacado: Boolean(destacado),
+                            color: color.trim().toUpperCase() || undefined,
+                            tamano: tamano.trim().toUpperCase() || undefined,
+                            stockWeb: stockWeb !== '' ? Number(stockWeb) : Number(stock) || 0,
+                            imageUrl: imageUrl.trim() || '/sinfoto.png'
+                        } as any);
+
+                        if (res.error) {
+                            setMessage({ type: 'error', text: res.error });
+                        } else {
+                            setMessage({ type: 'success', text: `Producto "${name.toUpperCase()}" guardado correctamente.` });
+                            resetProductForm();
+                            loadData();
+                        }
+                    }} className="space-y-2">
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
+                            <div className="flex items-center gap-2 p-1 bg-slate-50 border border-slate-200 rounded">
+                                <div className="w-10 h-10 relative rounded overflow-hidden border border-slate-300 bg-white shrink-0 flex items-center justify-center">
+                                    <img src={imageUrl.trim() || '/sinfoto.png'} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = '/sinfoto.png'; }} />
+                                </div>
+                                <span className="text-[8px] font-bold text-slate-500 uppercase">Vista Previa</span>
+                            </div>
+
+                            <div className="md:col-span-3">
+                                <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Subir Imagen desde la PC (Opcional)</label>
+                                <input type="file" disabled={!isFormUnlocked} accept="image/*" onChange={handleImageChange} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] text-slate-700 cursor-pointer" />
+                                {imageError && <p className="text-[9px] text-rose-600 font-bold mt-0.5">⚠️ {imageError}</p>}
+                            </div>
                         </div>
 
-                        <form onSubmit={async (e) => {
-                            e.preventDefault();
-
-                            if (!categoryId) {
-                                setMessage({ type: 'error', text: 'Debe seleccionar una categoría obligatoriamente.' });
-                                return;
-                            }
-                            if (!name.trim()) {
-                                setMessage({ type: 'error', text: 'El nombre del producto no puede estar vacío.' });
-                                return;
-                            }
-
-                            const res = await saveProduct({
-                                id: id || undefined,
-                                code,
-                                name: name.trim().toUpperCase(),
-                                categoryId,
-                                supplierId: supplierId || null,
-                                cost: Number(cost) || 0,
-                                otherCosts: Number(otherCosts) || 0,
-                                price: Number(priceFinal) || 0,
-                                margin: Number(margin) || 0,
-                                taxRate: Number(taxRate) || 0,
-                                stock: Number(stock) || 0,
-                                minStock: Number(minStock) || 0,
-                                destacado: Boolean(destacado), // SE ENVÍA DESTACADO
-                                imageUrl: imageUrl.trim() || '/sinfoto.png'
-                            });
-
-                            if (res.error) {
-                                setMessage({ type: 'error', text: res.error });
-                            } else {
-                                setMessage({ type: 'success', text: `Producto "${name.toUpperCase()}" guardado correctamente.` });
-                                setShowProductForm(false);
-                                resetProductForm();
-                                loadData();
-                            }
-                        }} className="space-y-2.5">
-
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
-                                <div className="flex flex-col items-center justify-center p-1 bg-slate-50 border border-slate-200 rounded">
-                                    <span className="block text-[8px] font-bold text-slate-500 uppercase mb-1">Vista Previa</span>
-                                    <div className="w-14 h-14 relative rounded overflow-hidden border border-slate-300 bg-white flex items-center justify-center">
-                                        <img
-                                            src={imageUrl.trim() || '/sinfoto.png'}
-                                            alt="Vista previa"
-                                            className="w-full h-full object-cover"
-                                            onError={(e) => {
-                                                (e.target as HTMLImageElement).src = '/sinfoto.png';
-                                            }}
-                                        />
-                                    </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            {/* CATEGORÍA AUTOCOMPLETE */}
+                            <div className="relative" ref={catRef}>
+                                <div className="flex justify-between items-center mb-0.5">
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase">Categoría *</label>
+                                    <button type="button" disabled={!isFormUnlocked} onClick={() => { setShowInlineCat(!showInlineCat); setShowInlineSup(false); }} className="text-[8px] font-bold text-emerald-700 hover:underline cursor-pointer">+ Inline</button>
                                 </div>
+                                {showInlineCat && (
+                                    <CategoryInlineForm initialName={categorySearch} onClose={() => setShowInlineCat(false)} onSuccess={(newCat) => { setCategories(prev => [...prev, newCat]); handleSelectCategory(newCat); setShowInlineCat(false); }} />
+                                )}
+                                <input type="text" disabled={!isFormUnlocked} placeholder="Buscar o seleccionar..." value={categorySearch} onChange={(e) => { setCategorySearch(e.target.value); setShowCatDropdown(true); if (categoryId) setCategoryId(''); }} onFocus={() => setShowCatDropdown(true)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold uppercase text-slate-800 focus:bg-white focus:outline-none" />
+                                {showCatDropdown && (
+                                    <div className="absolute z-40 top-full left-0 right-0 bg-white border border-slate-200 shadow-md rounded-b max-h-36 overflow-y-auto mt-0.5">
+                                        {filteredCats.length > 0 ? filteredCats.map(c => (
+                                            <div key={c.id} onClick={() => handleSelectCategory(c)} className="px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 flex justify-between">
+                                                <span className="font-bold">{c.name}</span>
+                                                <span className="text-[8px] text-slate-400">Margen: {c.defaultMargin}%</span>
+                                            </div>
+                                        )) : <div className="p-1.5 text-center text-[10px] text-slate-400">No hay resultados.</div>}
+                                    </div>
+                                )}
+                            </div>
 
-                                <div className="md:col-span-3">
-                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Subir Imagen desde la PC (Opcional)</label>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={handleImageChange}
-                                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] text-slate-700 file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[9px] file:font-bold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100 cursor-pointer"
-                                    />
-                                    {imageError && (
-                                        <p className="text-[10px] text-rose-600 font-bold mt-1 flex items-center gap-1">
-                                            <span>⚠️</span> {imageError}
-                                        </p>
-                                    )}
+                            {/* CÓDIGO PRODUCTO */}
+                            <div>
+                                <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Código Identificador</label>
+                                <input type="text" readOnly disabled={!isFormUnlocked} placeholder="Autogenerado..." value={code} className="w-full bg-slate-100 border border-slate-200 rounded px-2 py-1 text-[10px] font-mono font-bold text-slate-600 cursor-not-allowed" />
+                            </div>
+
+                            {/* NOMBRE PRODUCTO */}
+                            <div>
+                                <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Nombre del Producto *</label>
+                                <input type="text" disabled={!isFormUnlocked} required placeholder="EJ. FICUS LYRATA 10L" value={name} onChange={(e) => setName(e.target.value.toUpperCase())} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold uppercase text-slate-800 focus:bg-white" />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            {/* PROVEEDOR AUTOCOMPLETE */}
+                            <div className="relative" ref={supRef}>
+                                <div className="flex justify-between items-center mb-0.5">
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase">Proveedor Sugerido</label>
+                                    <button type="button" disabled={!isFormUnlocked} onClick={() => { setShowInlineSup(!showInlineSup); setShowInlineCat(false); }} className="text-[8px] font-bold text-emerald-700 hover:underline cursor-pointer">+ Inline</button>
+                                </div>
+                                {showInlineSup && (
+                                    <SupplierInlineForm initialName={supplierSearch} onClose={() => setShowInlineSup(false)} onSuccess={(newSup) => { setSuppliers(prev => [...prev, newSup]); setSupplierId(newSup.id); setSupplierSearch(newSup.name); setShowInlineSup(false); }} />
+                                )}
+                                <input type="text" disabled={!isFormUnlocked} placeholder="Buscar proveedor..." value={supplierSearch} onChange={(e) => { setSupplierSearch(e.target.value); setShowSupDropdown(true); if (supplierId) setSupplierId(''); }} onFocus={() => setShowSupDropdown(true)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold uppercase text-slate-800 focus:bg-white" />
+                                {showSupDropdown && (
+                                    <div className="absolute z-40 top-full left-0 right-0 bg-white border border-slate-200 shadow-md rounded-b max-h-36 overflow-y-auto mt-0.5">
+                                        {filteredSups.length > 0 ? filteredSups.map(s => (
+                                            <div key={s.id} onClick={() => { setSupplierId(s.id); setSupplierSearch(s.name); setShowSupDropdown(false); }} className="px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-emerald-50 cursor-pointer border-b border-slate-100">
+                                                <span className="font-bold">{s.name}</span>
+                                            </div>
+                                        )) : <div className="p-1.5 text-center text-[10px] text-slate-400">No hay resultados.</div>}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* COSTOS */}
+                            <div className="grid grid-cols-2 gap-1.5">
+                                <div>
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Costo Base ($)</label>
+                                    <input type="number" disabled={!isFormUnlocked} step="any" placeholder="0" value={cost} onChange={(e) => { const v = e.target.value === '' ? '' : parseFloat(e.target.value); setCost(v); computePrices(Number(v), Number(otherCosts), Number(margin), taxRate); }} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800" />
+                                </div>
+                                <div>
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Flete/Otros ($)</label>
+                                    <input type="number" disabled={!isFormUnlocked} step="any" placeholder="0" value={otherCosts} onChange={(e) => { const v = e.target.value === '' ? '' : parseFloat(e.target.value); setOtherCosts(v); computePrices(Number(cost), Number(v), Number(margin), taxRate); }} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800" />
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                {/* CATEGORÍA AUTOCOMPLETE CON INLINE */}
-                                <div className="relative" ref={catRef}>
+                            {/* MARGEN E IVA (CON CHECKBOX DE MANUAL) */}
+                            <div className="grid grid-cols-2 gap-1.5">
+                                <div>
                                     <div className="flex justify-between items-center mb-0.5">
-                                        <label className="block text-[8px] font-bold text-slate-600 uppercase">Categoría *</label>
-                                        <button
-                                            type="button"
-                                            onClick={() => { setShowInlineCat(!showInlineCat); setShowInlineSup(false); }}
-                                            className="text-[8px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                                        >
-                                            + Inline
-                                        </button>
-                                    </div>
-
-                                    {showInlineCat && (
-                                        <CategoryInlineForm
-                                            initialName={categorySearch}
-                                            onClose={() => setShowInlineCat(false)}
-                                            onSuccess={(newCat: Category) => {
-                                                if (newCat && newCat.id) {
-                                                    setCategories(prev => [...prev, newCat]);
-                                                    handleSelectCategory(newCat);
-                                                }
-                                                setShowInlineCat(false);
-                                            }}
-                                        />
-                                    )}
-
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar o seleccionar..."
-                                        value={categorySearch}
-                                        onChange={(e) => {
-                                            setCategorySearch(e.target.value);
-                                            setShowCatDropdown(true);
-                                            if (categoryId) setCategoryId('');
-                                        }}
-                                        onFocus={() => setShowCatDropdown(true)}
-                                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold uppercase text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                    />
-
-                                    {showCatDropdown && (
-                                        <div className="absolute z-40 top-full left-0 right-0 bg-white border border-slate-200 shadow-md rounded-b max-h-40 overflow-y-auto mt-0.5">
-                                            {filteredCats.length > 0 ? (
-                                                filteredCats.map(c => (
-                                                    <div
-                                                        key={c.id}
-                                                        onClick={() => handleSelectCategory(c)}
-                                                        className="px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 cursor-pointer border-b border-slate-100 last:border-none flex justify-between"
-                                                    >
-                                                        <span className="font-bold">{c.name}</span>
-                                                        <span className="text-[8px] text-slate-400">Margen: {c.defaultMargin}%</span>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <div className="p-2 text-center text-[10px] text-slate-400">
-                                                    No hay resultados. Usá "+ Inline".
-                                                </div>
-                                            )}
+                                        <label className="block text-[8px] font-bold text-slate-600 uppercase">Margen (%)</label>
+                                        <div className="flex items-center gap-1">
+                                            <input
+                                                type="checkbox"
+                                                disabled={!isFormUnlocked}
+                                                id="customMarginCheck"
+                                                checked={customMargin}
+                                                onChange={(e) => setCustomMargin(e.target.checked)}
+                                                className="w-3 h-3 text-emerald-600 rounded cursor-pointer"
+                                            />
+                                            <label htmlFor="customMarginCheck" className="text-[7px] font-bold text-emerald-800 uppercase cursor-pointer" title="Fija un margen manual que no cambiará si modificas el de la categoría">
+                                                Manual
+                                            </label>
                                         </div>
-                                    )}
-                                </div>
-
-                                {/* CÓDIGO PRODUCTO */}
-                                <div>
-                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Código Identificador</label>
-                                    <input
-                                        type="text"
-                                        readOnly
-                                        placeholder="Autogenerado..."
-                                        value={code}
-                                        className="w-full bg-slate-100 border border-slate-200 rounded px-2 py-1 text-[10px] font-mono font-bold text-slate-600 cursor-not-allowed"
-                                    />
-                                </div>
-
-                                {/* NOMBRE PRODUCTO */}
-                                <div>
-                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Nombre del Producto *</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        placeholder="EJ. FICUS LYRATA 10L"
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value.toUpperCase())}
-                                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold uppercase text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                {/* PROVEEDOR AUTOCOMPLETE CON INLINE */}
-                                <div className="relative" ref={supRef}>
-                                    <div className="flex justify-between items-center mb-0.5">
-                                        <label className="block text-[8px] font-bold text-slate-600 uppercase">Proveedor Sugerido</label>
-                                        <button
-                                            type="button"
-                                            onClick={() => { setShowInlineSup(!showInlineSup); setShowInlineCat(false); }}
-                                            className="text-[8px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                                        >
-                                            + Inline
-                                        </button>
                                     </div>
-                                    {showInlineSup && (
-                                        <SupplierInlineForm
-                                            initialName={supplierSearch}
-                                            onClose={() => setShowInlineSup(false)}
-                                            onSuccess={(newSup) => {
-                                                setSuppliers(prev => [...prev, newSup]);
-                                                setSupplierId(newSup.id);
-                                                setSupplierSearch(newSup.name);
-                                                setShowInlineSup(false);
-                                            }}
-                                        />
-                                    )}
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar o seleccionar proveedor..."
-                                        value={supplierSearch}
-                                        onChange={(e) => {
-                                            setSupplierSearch(e.target.value);
-                                            setShowSupDropdown(true);
-                                            if (supplierId) setSupplierId('');
-                                        }}
-                                        onFocus={() => setShowSupDropdown(true)}
-                                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold uppercase text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                    />
-                                    {showSupDropdown && (
-                                        <div className="absolute z-40 top-full left-0 right-0 bg-white border border-slate-200 shadow-md rounded-b max-h-40 overflow-y-auto mt-0.5">
-                                            {filteredSups.length > 0 ? (
-                                                filteredSups.map(s => (
-                                                    <div
-                                                        key={s.id}
-                                                        onClick={() => {
-                                                            setSupplierId(s.id);
-                                                            setSupplierSearch(s.name);
-                                                            setShowSupDropdown(false);
-                                                        }}
-                                                        className="px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 cursor-pointer border-b border-slate-100 last:border-none"
-                                                    >
-                                                        <span className="font-bold">{s.name}</span>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <div className="p-2 text-center text-[10px] text-slate-400">
-                                                    No hay resultados. Usá "+ Inline".
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* COSTO BASE Y OTROS COSTOS */}
-                                <div className="grid grid-cols-2 gap-1.5">
-                                    <div>
-                                        <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Costo Base ($)</label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            placeholder="0"
-                                            value={cost}
-                                            onChange={(e) => {
-                                                const v = e.target.value === '' ? '' : parseFloat(e.target.value);
-                                                setCost(v);
-                                                computePrices(Number(v), Number(otherCosts), Number(margin), taxRate);
-                                            }}
-                                            className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Flete/Otros ($)</label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            placeholder="0"
-                                            value={otherCosts}
-                                            onChange={(e) => {
-                                                const v = e.target.value === '' ? '' : parseFloat(e.target.value);
-                                                setOtherCosts(v);
-                                                computePrices(Number(cost), Number(v), Number(margin), taxRate);
-                                            }}
-                                            className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* MARGEN E IVA */}
-                                <div className="grid grid-cols-2 gap-1.5">
-                                    <div>
-                                        <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Margen (%)</label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            placeholder="100"
-                                            value={margin}
-                                            onChange={(e) => {
-                                                const v = e.target.value === '' ? '' : parseFloat(e.target.value);
-                                                setMargin(v);
-                                                computePrices(Number(cost), Number(otherCosts), Number(v), taxRate);
-                                            }}
-                                            className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Tasa IVA (%)</label>
-                                        <select
-                                            value={taxRate}
-                                            onChange={(e) => {
-                                                const v = parseFloat(e.target.value);
-                                                setTaxRate(v);
-                                                computePrices(Number(cost), Number(otherCosts), Number(margin), v);
-                                            }}
-                                            className="w-full bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-[10px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                        >
-                                            <option value={21}>21%</option>
-                                            <option value={10.5}>10.5%</option>
-                                            <option value={0}>0%</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 bg-emerald-50/50 p-2.5 rounded border border-emerald-100 items-center">
-                                <div className="flex flex-col justify-center">
-                                    <label className="block text-[8px] font-bold text-emerald-900 uppercase">Precio Final (Con IVA)</label>
-                                    <div className="text-sm font-black text-emerald-700">
-                                        ${priceFinal.toLocaleString('es-AR')}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Stock Actual</label>
                                     <input
                                         type="number"
-                                        placeholder="0"
-                                        value={stock}
-                                        onChange={(e) => setStock(e.target.value === '' ? '' : parseInt(e.target.value))}
-                                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                        disabled={!isFormUnlocked}
+                                        step="any"
+                                        placeholder="100"
+                                        value={margin}
+                                        onChange={(e) => {
+                                            const v = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                            setMargin(v);
+                                            setCustomMargin(true);
+                                            computePrices(Number(cost), Number(otherCosts), Number(v), taxRate);
+                                        }}
+                                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold text-slate-800"
                                     />
                                 </div>
-
                                 <div>
-                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Stock Mínimo</label>
-                                    <input
-                                        type="number"
-                                        placeholder="2"
-                                        value={minStock}
-                                        onChange={(e) => setMinStock(e.target.value === '' ? '' : parseInt(e.target.value))}
-                                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                    />
-                                </div>
-
-                                {/* NUEVO CHECKBOX DE DESTACADO */}
-                                <div className="flex items-center gap-2 pt-2 md:pt-4">
-                                    <input
-                                        type="checkbox"
-                                        id="destacadoCheck"
-                                        checked={destacado}
-                                        onChange={(e) => setDestacado(e.target.checked)}
-                                        className="w-4 h-4 text-emerald-600 rounded border-emerald-300 focus:ring-emerald-500 cursor-pointer"
-                                    />
-                                    <label htmlFor="destacadoCheck" className="text-[9px] font-bold text-slate-700 uppercase cursor-pointer select-none">
-                                        ⭐ Destacar en Inicio
-                                    </label>
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Tasa IVA (%)</label>
+                                    <select disabled={!isFormUnlocked} value={taxRate} onChange={(e) => { const v = parseFloat(e.target.value); setTaxRate(v); computePrices(Number(cost), Number(otherCosts), Number(margin), v); }} className="w-full bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-[10px] font-semibold text-slate-800">
+                                        <option value={21}>21%</option>
+                                        <option value={10.5}>10.5%</option>
+                                        <option value={0}>0%</option>
+                                    </select>
                                 </div>
                             </div>
+                        </div>
 
-                            <div className="flex justify-end gap-1.5 pt-1.5 border-t">
-                                <button
-                                    type="button"
-                                    onClick={() => { setShowProductForm(false); resetProductForm(); }}
-                                    className="px-3 py-1 border border-slate-300 text-slate-700 text-[10px] font-semibold rounded hover:bg-slate-50 cursor-pointer"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-3.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded shadow-2xs cursor-pointer"
-                                >
-                                    {id ? 'Guardar Cambios' : 'Crear Producto'}
-                                </button>
+                        {/* STOCKS Y PRECIO FINAL */}
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-2 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100 items-center">
+                            <div className="flex flex-col justify-center">
+                                <label className="block text-[8px] font-bold text-emerald-900 uppercase">Precio Final (Con IVA)</label>
+                                <div className="text-sm font-black text-emerald-700">${priceFinal.toLocaleString('es-AR')}</div>
                             </div>
+                            <div>
+                                <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Stock Físico</label>
+                                <input type="number" disabled={!isFormUnlocked} placeholder="0" value={stock} onChange={(e) => setStock(e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[10px] font-bold text-slate-800" />
+                            </div>
+                            <div>
+                                <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Stock Mínimo</label>
+                                <input type="number" disabled={!isFormUnlocked} placeholder="2" value={minStock} onChange={(e) => setMinStock(e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800" />
+                            </div>
+                            <div>
+                                <label className="block text-[8px] font-bold text-emerald-800 uppercase mb-0.5">Stock Exclusivo Web</label>
+                                <input type="number" disabled={!isFormUnlocked} placeholder="0" value={stockWeb} onChange={(e) => setStockWeb(e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[10px] font-bold text-emerald-900" />
+                            </div>
+                            <div className="flex items-center gap-2 pt-1">
+                                <input type="checkbox" disabled={!isFormUnlocked} id="destacadoCheck" checked={destacado} onChange={(e) => setDestacado(e.target.checked)} className="w-3.5 h-3.5 text-emerald-600 rounded border-emerald-300 cursor-pointer" />
+                                <label htmlFor="destacadoCheck" className="text-[9px] font-bold text-slate-700 uppercase cursor-pointer select-none">⭐ Destacado Web</label>
+                            </div>
+                        </div>
 
-                        </form>
-                    </div>
-                )}
+                        {/* VARIANTES WEB EN UNA SOLA LÍNEA */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-stone-100 p-2 rounded-lg border border-stone-200">
+                            <div>
+                                <label className="block text-[8px] font-bold text-stone-700 uppercase mb-0.5">🎨 Color (Variante Web)</label>
+                                <input type="text" disabled={!isFormUnlocked} placeholder="EJ. BARRO, TERRACOTA..." value={color} onChange={(e) => setColor(e.target.value.toUpperCase())} className="w-full bg-white border border-stone-300 rounded px-2 py-1 text-[10px] font-semibold text-stone-800" />
+                            </div>
+                            <div>
+                                <label className="block text-[8px] font-bold text-stone-700 uppercase mb-0.5">📏 Tamaño / Medida (Variante Web)</label>
+                                <input type="text" disabled={!isFormUnlocked} placeholder="EJ. Nº 13, 10 LITROS..." value={tamano} onChange={(e) => setTamano(e.target.value.toUpperCase())} className="w-full bg-white border border-stone-300 rounded px-2 py-1 text-[10px] font-semibold text-stone-800" />
+                            </div>
+                        </div>
 
-                {/* MODAL AJUSTE RÁPIDO DE STOCK */}
-                {/* ... (Se mantiene intacto) ... */}
+                        <div className="flex justify-end gap-1.5 pt-1 border-t">
+                            <button type="button" disabled={!isFormUnlocked} onClick={resetProductForm} className="px-3 py-1 border border-slate-300 text-slate-700 text-[10px] font-semibold rounded hover:bg-slate-50 cursor-pointer">
+                                Cancelar / Bloquear
+                            </button>
+                            <button type="submit" disabled={!isFormUnlocked} className="px-3.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded shadow-2xs cursor-pointer">
+                                {id ? 'Guardar Cambios' : 'Registrar Producto'}
+                            </button>
+                        </div>
+
+                    </form>
+                </div>
+
+                {/* MODAL DE LISTADO COMPLETO */}
+                <ModalListadoProductos
+                    isOpen={showModalListado}
+                    onClose={() => setShowModalListado(false)}
+                    products={products}
+                    loading={loading}
+                    onEdit={(prod) => handleEditProduct(prod)}
+                    onQuickStock={(prod) => handleOpenStockModal(prod)}
+                    onDelete={async (id, name) => {
+                        if (confirm(`¿Eliminar producto "${name}"?`)) {
+                            const res = await deleteProduct(id);
+                            if (res.error) setMessage({ type: 'error', text: res.error });
+                            else { setMessage({ type: 'success', text: 'Producto eliminado.' }); loadData(); }
+                        }
+                    }}
+                />
+
+                {/* MODALES DE STOCK E IMPORTACIÓN */}
                 {showStockModal && selectedProductForStock && (
                     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3">
                         <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 space-y-3 animate-in zoom-in-95">
                             <div className="flex justify-between items-center border-b pb-2">
-                                <div>
-                                    <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                                        ⚡ Ajuste Rápido de Stock
-                                    </h3>
-                                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">
-                                        {selectedProductForStock.name} ({selectedProductForStock.code})
-                                    </p>
-                                </div>
-                                <button type="button" onClick={() => setShowStockModal(false)} className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer">✕</button>
+                                <h3 className="text-xs font-extrabold text-slate-900">⚡ Ajuste Rápido de Stock</h3>
+                                <button type="button" onClick={() => setShowStockModal(false)} className="text-slate-400 font-bold cursor-pointer">✕</button>
                             </div>
-
-                            <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded border border-slate-200 text-[10px]">
-                                <div>
-                                    <span className="block text-[8px] font-bold text-slate-400 uppercase">Stock Actual</span>
-                                    <span className="font-mono font-black text-slate-800 text-sm">{selectedProductForStock.stock} un.</span>
-                                </div>
-                                <div>
-                                    <span className="block text-[8px] font-bold text-slate-400 uppercase">Stock Resultante</span>
-                                    <span className={`font-mono font-black text-sm ${calculatedNewStock <= selectedProductForStock.minStock ? 'text-amber-600' : 'text-emerald-700'}`}>
-                                        {calculatedNewStock} un.
-                                    </span>
-                                </div>
+                            <div className="flex justify-between text-xs bg-slate-50 p-2 rounded">
+                                <span>Actual: <b>{selectedProductForStock.stock}</b></span>
+                                <span>Nuevo: <b className="text-emerald-700">{calculatedNewStock}</b></span>
                             </div>
-
-                            <div className="space-y-1">
-                                <label className="block text-[8px] font-bold text-slate-600 uppercase">Tipo de Movimiento</label>
-                                <div className="grid grid-cols-3 gap-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setStockAdjustmentType('IN')}
-                                        className={`py-1.5 px-1 text-[9px] font-extrabold rounded border text-center transition-all cursor-pointer ${stockAdjustmentType === 'IN' ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
-                                    >
-                                        🟢 Entrada (+)
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setStockAdjustmentType('OUT')}
-                                        className={`py-1.5 px-1 text-[9px] font-extrabold rounded border text-center transition-all cursor-pointer ${stockAdjustmentType === 'OUT' ? 'bg-rose-600 text-white border-rose-600 shadow-2xs' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
-                                    >
-                                        🔴 Salida (-)
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setStockAdjustmentType('ADJUSTMENT')}
-                                        className={`py-1.5 px-1 text-[9px] font-extrabold rounded border text-center transition-all cursor-pointer ${stockAdjustmentType === 'ADJUSTMENT' ? 'bg-sky-600 text-white border-sky-600 shadow-2xs' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
-                                    >
-                                        🔵 Ajuste (=)
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">
-                                    {stockAdjustmentType === 'IN' && 'Cantidad a ingresar'}
-                                    {stockAdjustmentType === 'OUT' && 'Cantidad a descontar'}
-                                    {stockAdjustmentType === 'ADJUSTMENT' && 'Nuevo Total en Inventario'}
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    autoFocus
-                                    placeholder="0"
-                                    value={stockQuantityInput}
-                                    onChange={(e) => setStockQuantityInput(e.target.value === '' ? '' : parseInt(e.target.value))}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveStockAdjustment()}
-                                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs font-bold font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                />
-                            </div>
-
-                            <div className="flex justify-end gap-1.5 pt-2 border-t">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowStockModal(false)}
-                                    className="px-3 py-1 border border-slate-300 text-slate-700 text-[10px] font-semibold rounded hover:bg-slate-50 cursor-pointer"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={stockLoading}
-                                    onClick={handleSaveStockAdjustment}
-                                    className="px-3.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded shadow-2xs disabled:opacity-50 cursor-pointer"
-                                >
-                                    {stockLoading ? 'Guardando...' : 'Confirmar Stock'}
-                                </button>
+                            <input type="number" autoFocus value={stockQuantityInput} onChange={(e) => setStockQuantityInput(e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full border rounded p-1.5 text-xs font-bold" placeholder="Cantidad..." />
+                            <div className="flex justify-end gap-1 pt-2">
+                                <button type="button" onClick={() => setShowStockModal(false)} className="px-3 py-1 border text-xs rounded">Cancelar</button>
+                                <button type="button" onClick={handleSaveStockAdjustment} className="px-3.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded">Confirmar</button>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* MODAL DE IMPORTACIÓN */}
-                {/* ... (Se mantiene intacto) ... */}
                 {showImportModal && (
                     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3">
-                        <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 space-y-3 animate-in zoom-in-95">
+                        <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 space-y-3">
                             <div className="flex justify-between items-center border-b pb-1.5">
-                                <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                                    <span>📤</span> Importación Masiva
-                                </h3>
-                                <button type="button" onClick={() => setShowImportModal(false)} className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer">✕</button>
+                                <h3 className="text-xs font-extrabold text-slate-900">📤 Importación Masiva</h3>
+                                <button type="button" onClick={() => setShowImportModal(false)} className="text-slate-400 font-bold cursor-pointer">✕</button>
                             </div>
-
-                            <div className="text-[10px] text-slate-600 space-y-1.5">
-                                <p>Seleccioná un archivo en formato <strong>CSV</strong> o <strong>JSON</strong> con el catálogo.</p>
-                                <div className="p-2 bg-slate-50 rounded border border-slate-200 text-[9px] font-mono leading-tight">
-                                    Encabezados CSV:<br />
-                                    <code>Codigo, Nombre, Categoria, Proveedor, CostoBase, FleteOtros, Margen, IVA, PrecioFinal, Stock, StockMinimo, Destacado, ImagenUrl</code>
-                                </div>
-                            </div>
-
-                            <div>
-                                <input
-                                    type="file"
-                                    accept=".csv, .json"
-                                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                                    className="w-full text-[10px] text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
-                                />
-                            </div>
-
-                            <div className="flex justify-end gap-1.5 pt-1 border-t">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowImportModal(false)}
-                                    className="px-3 py-1 border border-slate-300 text-slate-700 text-[10px] font-semibold rounded hover:bg-slate-50 cursor-pointer"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={importing || !importFile}
-                                    onClick={handleProcessImport}
-                                    className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold rounded shadow-2xs disabled:opacity-50 cursor-pointer"
-                                >
-                                    {importing ? 'Procesando...' : 'Importar'}
-                                </button>
+                            <input type="file" accept=".csv, .json" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="w-full text-xs" />
+                            <div className="flex justify-end gap-1 pt-1 border-t">
+                                <button type="button" onClick={() => setShowImportModal(false)} className="px-3 py-1 border text-xs rounded">Cancelar</button>
+                                <button type="button" disabled={importing || !importFile} onClick={handleProcessImport} className="px-3 py-1 bg-sky-600 text-white text-xs font-bold rounded">Importar</button>
                             </div>
                         </div>
                     </div>
                 )}
-
-                {/* TABLA PRINCIPAL Y PESTAÑAS */}
-                <div className="bg-stone-50 dark:bg-stone-900 p-4 md:p-6 rounded-xl shadow-md border border-stone-200 dark:border-stone-800 space-y-4">
-                    <div className="p-2 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2">
-                        <div className="flex items-center gap-1 bg-slate-200/60 p-0.5 rounded">
-                            <button
-                                type="button"
-                                onClick={() => setTabActiva('catalogo')}
-                                className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all cursor-pointer ${tabActiva === 'catalogo' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
-                            >
-                                📋 Catálogo ({products.length})
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setTabActiva('alertas')}
-                                className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all cursor-pointer ${tabActiva === 'alertas' ? 'bg-white text-amber-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
-                            >
-                                ⚠️ Bajo Stock ({products.filter(p => p.stock <= p.minStock).length})
-                            </button>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <div className="relative flex-1 sm:w-56">
-                                <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-slate-400 text-[10px]">🔍</span>
-                                <input
-                                    type="text"
-                                    placeholder="Buscar código, nombre..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 pl-7 text-[10px] text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                />
-                                {searchTerm && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setSearchTerm('')}
-                                        className="absolute inset-y-0 right-0 pr-2 text-[10px] text-slate-400 hover:text-slate-600 cursor-pointer"
-                                    >
-                                        ✕
-                                    </button>
-                                )}
-                            </div>
-                            <select
-                                value={itemsPerPage}
-                                onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                                className="bg-white border border-slate-300 rounded px-1.5 py-1 text-[10px] text-slate-700 font-semibold focus:outline-none cursor-pointer"
-                            >
-                                <option value={5}>5 p/p</option>
-                                <option value={10}>10 p/p</option>
-                                <option value={15}>15 p/p</option>
-                                <option value={25}>25 p/p</option>
-                                <option value={50}>50 p/p</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-slate-100/70 border-b border-slate-200 text-[9px] font-extrabold text-slate-600 uppercase tracking-wider select-none">
-                                    <th className="py-2 px-2.5 text-center">Img</th>
-                                    <th onClick={() => handleSort('code')} className="py-2 px-2.5 cursor-pointer hover:bg-slate-200/50 transition-colors">
-                                        Código {sortField === 'code' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
-                                    </th>
-                                    <th onClick={() => handleSort('name')} className="py-2 px-2.5 cursor-pointer hover:bg-slate-200/50 transition-colors">
-                                        Producto {sortField === 'name' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
-                                    </th>
-                                    <th onClick={() => handleSort('category')} className="py-2 px-2.5 cursor-pointer hover:bg-slate-200/50 transition-colors">
-                                        Categoría {sortField === 'category' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
-                                    </th>
-                                    {/* COLUMNA NUEVA EN LA TABLA */}
-                                    <th className="py-2 px-2.5 text-center">Destacado</th>
-
-                                    <th className="py-2 px-2.5 text-right">Costo Total</th>
-                                    <th onClick={() => handleSort('price')} className="py-2 px-2.5 text-right cursor-pointer hover:bg-slate-200/50 transition-colors">
-                                        Precio Final {sortField === 'price' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
-                                    </th>
-                                    <th onClick={() => handleSort('stock')} className="py-2 px-2.5 text-center cursor-pointer hover:bg-slate-200/50 transition-colors">
-                                        Stock {sortField === 'stock' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
-                                    </th>
-                                    <th className="py-2 px-2.5 text-center">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 text-[10px]">
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={10} className="py-12 text-center text-slate-400 font-medium">
-                                            Cargando catálogo...
-                                        </td>
-                                    </tr>
-                                ) : paginatedProducts.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={10} className="py-12 text-center text-slate-400 font-medium">
-                                            {searchTerm ? 'Sin coincidencias con la búsqueda.' : 'No hay productos registrados.'}
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    paginatedProducts.map((prod) => {
-                                        const totalCost = (prod.cost || 0) + (prod.otherCosts || 0);
-                                        const isLowStock = prod.stock <= prod.minStock;
-
-                                        return (
-                                            <tr key={prod.id} className="hover:bg-slate-50/80 transition-colors">
-                                                <td className="py-2 px-2.5 text-center">
-                                                    <div className="w-8 h-8 mx-auto relative rounded overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
-                                                        <img
-                                                            src={prod.imageUrl?.trim() || '/sinfoto.png'}
-                                                            alt={prod.name}
-                                                            className="w-full h-full object-cover"
-                                                            onError={(e) => {
-                                                                (e.target as HTMLImageElement).src = '/sinfoto.png';
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </td>
-                                                <td className="py-2 px-2.5 font-mono font-bold text-slate-600">
-                                                    {prod.code}
-                                                </td>
-                                                <td className="py-2 px-2.5 font-bold text-slate-800 uppercase">
-                                                    {prod.name}
-                                                </td>
-                                                <td className="py-2 px-2.5">
-                                                    <span className="bg-slate-100 text-slate-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-slate-200 uppercase">
-                                                        {prod.category?.name || 'Sin categoría'}
-                                                    </span>
-                                                </td>
-
-                                                {/* INDICADOR DE DESTACADO EN TABLA */}
-                                                <td className="py-2 px-2.5 text-center">
-                                                    {prod.destacado ? <span title="Destacado en Inicio">⭐</span> : <span className="text-slate-300">-</span>}
-                                                </td>
-
-                                                <td className="py-2 px-2.5 text-right font-semibold text-slate-600 font-mono">
-                                                    ${totalCost.toLocaleString('es-AR')}
-                                                </td>
-                                                <td className="py-2 px-2.5 text-right font-black text-emerald-700 font-mono">
-                                                    ${prod.price.toLocaleString('es-AR')}
-                                                </td>
-                                                <td className="py-2 px-2.5 text-center font-mono">
-                                                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold ${isLowStock ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-emerald-100 text-emerald-800'}`}>
-                                                        {prod.stock} un.
-                                                    </span>
-                                                </td>
-                                                <td className="py-2 px-2.5 text-center">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleOpenStockModal(prod)}
-                                                            className="p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
-                                                            title="Ajuste Rápido de Stock"
-                                                        >
-                                                            ⚡
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleEditProduct(prod)}
-                                                            className="p-1 text-slate-500 hover:text-sky-700 hover:bg-sky-50 rounded transition-colors cursor-pointer"
-                                                            title="Editar Producto"
-                                                        >
-                                                            ✏️
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={async () => {
-                                                                if (confirm(`¿Eliminar producto "${prod.name}"?`)) {
-                                                                    const res = await deleteProduct(prod.id);
-                                                                    if (res.error) {
-                                                                        setMessage({ type: 'error', text: res.error });
-                                                                    } else {
-                                                                        setMessage({ type: 'success', text: 'Producto eliminado.' });
-                                                                        loadData();
-                                                                    }
-                                                                }
-                                                            }}
-                                                            className="p-1 text-slate-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                                                            title="Eliminar"
-                                                        >
-                                                            🗑️
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div className="p-2.5 border-t border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-slate-600">
-                        <div>
-                            Mostrando del <span className="font-bold text-slate-700">{totalItems > 0 ? startIndex + 1 : 0}</span> al <span className="font-bold text-slate-700">{Math.min(startIndex + itemsPerPage, totalItems)}</span> de <span className="font-bold text-slate-700">{totalItems}</span> registros
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <button
-                                type="button"
-                                disabled={currentPage === 1}
-                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                className="px-2.5 py-1 bg-white border border-slate-200 rounded-md font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all shadow-2xs"
-                            >
-                                ◀ Anterior
-                            </button>
-                            <span className="px-3 py-1 bg-white border border-slate-200 rounded-md font-mono font-bold text-emerald-800 text-xs shadow-2xs">
-                                {currentPage} / {totalPages}
-                            </span>
-                            <button
-                                type="button"
-                                disabled={currentPage === totalPages || totalPages === 0}
-                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                                className="px-2.5 py-1 bg-white border border-slate-200 rounded-md font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all shadow-2xs"
-                            >
-                                Siguiente ▶
-                            </button>
-                        </div>
-                    </div>
-
-                </div>
 
             </div>
         </div>

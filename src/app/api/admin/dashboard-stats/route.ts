@@ -8,19 +8,53 @@ export async function GET() {
         // 1. Obtener la fecha de hoy en formato 'YYYY-MM-DD'
         const today = new Date().toISOString().split('T')[0];
 
-        // 2. Verificar si existe un cierre de caja registrado para hoy en la base de datos
+        // Definir el inicio y fin del día actual
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // 2. Verificar si existe un cierre de caja registrado para hoy
         const closureToday = await prisma.cashClosure.findUnique({
             where: { date: today }
         });
 
-        // Si no hay registro de cierre para hoy, la caja está pendiente/abierta
-        const cajaPendiente = !closureToday;
+        // 3. Verificar si hay movimientos de caja o ventas registradas hoy (indica que la caja está abierta/en uso)
+        const movementsTodayCount = await prisma.cashMovement.count({
+            where: {
+                createdAt: {
+                    gte: startOfDay,
+                    lte: endOfDay
+                }
+            }
+        });
 
-        // 3. Contar la cantidad real de ventas/facturas registradas en TiDB
-        const facturasCount = await prisma.sale.count();
+        const salesTodayCount = await prisma.sale.count({
+            where: {
+                createdAt: {
+                    gte: startOfDay,
+                    lte: endOfDay
+                }
+            }
+        });
 
-        // 4. Contar la cantidad real de pedidos/compras registradas en TiDB
-        const pedidosCount = await prisma.purchase.count();
+        // La caja está pendiente/abierta si hubo movimientos o ventas hoy y AÚN NO se ha cerrado formalmente
+        const cajaAbiertaEnTurno = movementsTodayCount > 0 || salesTodayCount > 0;
+        const cajaPendiente = Boolean(cajaAbiertaEnTurno && !closureToday);
+
+        // 4. Contar la cantidad real de ventas/facturas registradas hoy
+        const facturasCount = salesTodayCount;
+
+        // 5. Contar la cantidad real de pedidos/compras registradas hoy
+        const pedidosCount = await prisma.purchase.count({
+            where: {
+                createdAt: {
+                    gte: startOfDay,
+                    lte: endOfDay
+                }
+            }
+        });
 
         return NextResponse.json({
             success: true,

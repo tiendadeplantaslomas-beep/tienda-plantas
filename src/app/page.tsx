@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import ProductCarousel from './components/ProductCarousel';
+import ProductCarousel from '@/app/tienda/components/ProductCarousel';
 import { X, ShieldCheck, UserCheck, AlertCircle, Tag, MapPin, Sparkles, MessageSquarePlus, Send, Star, ExternalLink } from 'lucide-react';
 import CartDrawer from '@/components/CartDrawer';
 

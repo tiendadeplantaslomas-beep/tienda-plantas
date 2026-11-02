@@ -55,35 +55,64 @@ model Supplier {
 // PRODUCTOS E INVENTARIO
 // -------------------------------------------------------------
 model Product {
-  id          String         @id @default(cuid())
-  code        String         @unique
-  name        String
-  description String?        @db.Text 
-  imageUrl    String?        @db.LongText
+  id              String           @id @default(cuid())
+  code            String           @unique
+  sku             String?          @unique
+  codigoBarras    String?          
+  name            String
+  description     String?          @db.Text 
+  imageUrl        String?          @db.LongText
   
-  categoryId  String
-  category    Category       @relation(fields: [categoryId], references: [id])
+  categoryId      String
+  category        Category         @relation(fields: [categoryId], references: [id])
   
-  supplierId  String?
-  supplier    Supplier?      @relation(fields: [supplierId], references: [id])
+  supplierId      String?
+  supplier        Supplier?        @relation(fields: [supplierId], references: [id])
 
-  promotions  Promotion[]    @relation("PromotionProducts")
-  cost        Int            
-  otherCosts  Int            @default(0) 
-  price       Int            
-  margin      Float          @default(100)
-  taxRate     Float          @default(21)
+  promotions      Promotion[]      @relation("PromotionProducts")
+
+    // Costos y Precios
+  cost            Int          
+  otherCosts      Int              @default(0) 
+  price           Int              // Precio base o regular
+  precioOferta    Int?             // Precio promocional o de oferta para la web
+  margin          Float            @default(100)
+  customMargin    Boolean          @default(false) // 👈 Nuevo: indica si el margen es manual/personalizado
+  taxRate         Float            @default(21)
   
-  trackStock  Boolean        @default(true)
-  stock       Int            @default(0)
-  minStock    Int            @default(2) 
-  destacado   Boolean        @default(false)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @default(now()) @updatedAt
+  // Control de Stock Separado (Físico vs Web)
+  trackStock      Boolean          @default(true)
+  stock           Int              @default(0) // Stock general / local del negocio
+  stockWeb        Int              @default(0) // Stock exclusivo para la Tienda Online
+  minStock        Int              @default(2) 
   
-  saleItems     SaleItem[]
-  purchaseItems PurchaseItem[] 
-  movements     StockMovement[]
+  // Atributos para la Ficha y Variantes (Estilo Vivero)
+  tamano          String?          // Ej: "Nº 21", "3 Litros"
+  color           String?          // Ej: "Terracota", "Verde", "Blanco"
+  variantes       ProductVariant[] // Relación con múltiples tamaños/colores
+  
+  destacado       Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @default(now()) @updatedAt
+  
+  saleItems       SaleItem[]
+  purchaseItems   PurchaseItem[] 
+  movements       StockMovement[]
+}
+
+model ProductVariant {
+  id           String   @id @default(cuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  sku          String?  @unique
+  color        String?  // Ej: Terracota, Barro, Blanco
+  tamano       String?  // Ej: N° 13, N° 15, N° 21
+  price        Int      // Precio específico para esta variante
+  stockWeb     Int      @default(0) // Stock web específico de esta variante
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 }
 
 // -------------------------------------------------------------
@@ -369,6 +398,7 @@ model Resena {
 
   @@map("resenas") 
 }
+
 model Claim {
   id          String    @id @default(cuid())
   saleId      String

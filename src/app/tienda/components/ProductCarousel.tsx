@@ -37,20 +37,27 @@ export default function ProductCarousel({ products, whatsappNumber }: { products
 
                     return (
                         <div key={product.id} className="min-w-[240px] max-w-[240px] bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden flex flex-col hover:shadow-md hover:border-emerald-500 transition-all duration-300 group shrink-0">
-                            <div className="relative h-44 w-full bg-stone-100 overflow-hidden">
+                            
+                            {/* Imagen con enlace directo a la ficha de detalle */}
+                            <Link href={`/tienda/producto/${product.id}`} className="relative h-44 w-full bg-stone-100 overflow-hidden block">
                                 <img
                                     src={product.imageUrl || "https://res.cloudinary.com/mfzvsfah/image/upload/v1/sinfoto"}
                                     alt={product.name}
                                     className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
                                 />
-                            </div>
+                            </Link>
 
                             <div className="p-4 flex flex-col flex-grow justify-between space-y-3">
                                 <div>
                                     <span className="text-[9px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md inline-block mb-1.5">
                                         {product.category?.name || 'General'}
                                     </span>
-                                    <h3 className="font-bold text-stone-900 text-xs line-clamp-2 leading-snug">{product.name}</h3>
+                                    {/* Título con enlace directo a la ficha de detalle */}
+                                    <Link href={`/tienda/producto/${product.id}`}>
+                                        <h3 className="font-bold text-stone-900 text-xs line-clamp-2 leading-snug hover:text-emerald-700 transition">
+                                            {product.name}
+                                        </h3>
+                                    </Link>
                                 </div>
 
                                 <div>
@@ -67,11 +74,13 @@ export default function ProductCarousel({ products, whatsappNumber }: { products
                                         >
                                             💬 Consultar WhatsApp
                                         </a>
+                                        
+                                        {/* Botón directo a la Ficha de Detalle de Producto */}
                                         <Link
-                                            href="/tienda/login"
-                                            className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-medium py-1.5 px-3 rounded-xl text-center text-[10px] transition"
+                                            href={`/tienda/producto/${product.id}`}
+                                            className="bg-stone-100 hover:bg-emerald-50 text-stone-700 hover:text-emerald-800 font-bold py-1.5 px-3 rounded-xl text-center text-[10px] transition border border-stone-200"
                                         >
-                                            🛒 Iniciar sesión
+                                            🌿 Ver detalle y variantes
                                         </Link>
                                     </div>
                                 </div>

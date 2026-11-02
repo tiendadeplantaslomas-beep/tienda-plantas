@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import ProductCarousel from './components/ProductCarousel';
-import { X, ShieldCheck, UserCheck, AlertCircle, Tag, MapPin, Sparkles, MessageSquarePlus, Send, Star, ExternalLink } from 'lucide-react';
+import { X, ShieldCheck, UserCheck, AlertCircle, Tag, MapPin, Sparkles, MessageSquarePlus, Send, Star, ExternalLink, ChevronRight } from 'lucide-react';
 import CartDrawer from '@/components/CartDrawer';
 
 const PROMO_GRADIENTS = [
@@ -94,7 +94,6 @@ function TiendaContent() {
     const [estrellasResena, setEstrellasResena] = useState(5);
     const [mensajeResenaExito, setMensajeResenaExito] = useState('');
 
-    // Refs declarados correctamente al nivel superior del componente
     const categoriasScrollRef = useRef<HTMLDivElement>(null);
     const promosScrollRef = useRef<HTMLDivElement>(null);
 
@@ -184,7 +183,6 @@ function TiendaContent() {
         }
     }, []);
 
-    // SEPARACIÓN DINÁMICA DE BANNERS POR SECCIÓN DEL CMS (Solo activos)
     const bannersHero = banners.filter((b: any) => b.activo !== false && (!b.seccion || b.seccion === 'hero' || b.seccion === 'Hero / Banner Principal'));
     const bannersPromos = banners.filter((b: any) => b.activo !== false && (b.seccion === 'promociones' || b.seccion === 'Sección de Promociones'));
     const bannersCategoriasCMS = banners.filter((b: any) => b.activo !== false && (b.seccion === 'categorias' || b.seccion === 'Carrusel de Categorías'));
@@ -303,7 +301,6 @@ function TiendaContent() {
         })
         : productosDestacados;
 
-        // Filtrar los banners de la barra de beneficios desde el CMS
     const bannersBeneficios = banners.filter(
         (b: any) => b.activo !== false && (b.seccion === 'beneficios' || b.seccion === 'Barra de Beneficios')
     );
@@ -467,7 +464,6 @@ function TiendaContent() {
             {/* 3. BARRA DE BENEFICIOS Y CONFIANZA DINÁMICA */}
             <section className="max-w-7xl w-full mx-auto px-6 py-6 shrink-0">
                 <div className="bg-white rounded-2xl p-6 border border-stone-200/80 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-6 items-center divide-y md:divide-y-0 md:divide-x divide-stone-100">
-                    {/* Tramo 1: Medios de Pago */}
                     {(() => {
                         const item = bannersBeneficios.find((b: any) => b.titulo === 'Medios de Pago');
                         return (
@@ -483,7 +479,6 @@ function TiendaContent() {
                         );
                     })()}
 
-                    {/* Tramo 2: Contactanos */}
                     {(() => {
                         const item = bannersBeneficios.find((b: any) => b.titulo === 'Contactanos');
                         return (
@@ -499,7 +494,6 @@ function TiendaContent() {
                         );
                     })()}
 
-                    {/* Tramo 3: Envíos Programados */}
                     {(() => {
                         const item = bannersBeneficios.find((b: any) => b.titulo === 'Envíos Programados');
                         return (
@@ -517,130 +511,7 @@ function TiendaContent() {
                 </div>
             </section>
 
-            {/* 4. SECCIÓN DE PROMOCIONES Y OFERTAS VIGENTES */}
-            {(promotions.length > 0 || bannersPromos.length > 0) && (
-                <section className="max-w-7xl w-full mx-auto px-6 py-8 shrink-0 space-y-4">
-                    <div className="flex justify-between items-center mb-4">
-                        <div>
-                            <h2 className="text-xl font-black text-stone-900 tracking-tight flex items-center gap-2">
-                                🔥 Promociones y Ofertas Imperdibles
-                            </h2>
-                            <p className="text-xs text-stone-500 mt-0.5">Beneficios exclusivos y descuentos especiales de temporada</p>
-                        </div>
-                    </div>
-
-                    <div className="relative group bg-stone-100/80 border border-stone-200/60 rounded-3xl p-6 shadow-xs">
-                        <button
-                            onClick={() => scrollPromos('left')}
-                            className="absolute left-[-16px] top-1/2 -translate-y-1/2 z-20 bg-white border border-stone-200 hover:bg-emerald-50 text-stone-800 w-11 h-11 rounded-full shadow-md transition flex items-center justify-center font-bold cursor-pointer text-base"
-                            aria-label="Anterior"
-                        >
-                            ❮
-                        </button>
-
-                        <div
-                            ref={promosScrollRef}
-                            className="flex gap-5 overflow-x-auto pb-4 pt-1 no-scrollbar scroll-smooth px-2"
-                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                        >
-                            {/* Banners de Promociones del CMS */}
-                            {bannersPromos.map((bp: any) => (
-                                <div
-                                    key={`banner-${bp.id}`}
-                                    className="relative rounded-2xl overflow-hidden shadow-sm border border-stone-200 p-4 text-white bg-stone-900 flex flex-col justify-between min-w-[280px] max-w-[280px] h-44 shrink-0 transition-all hover:shadow-md"
-                                    style={{ backgroundImage: `url(${bp.imagenUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-                                >
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-0"></div>
-                                    <div className="relative z-10 space-y-1">
-                                        {bp.badge && <span className="bg-amber-400 text-stone-900 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">{bp.badge}</span>}
-                                        <h3 className="text-sm font-black leading-snug">{bp.titulo}</h3>
-                                        {bp.subtitulo && <p className="text-[11px] text-stone-200 line-clamp-1">{bp.subtitulo}</p>}
-                                    </div>
-                                    <div className="relative z-10 pt-2 mt-auto">
-                                        <button
-                                            onClick={() => handleOpenPromoModal({
-                                                id: bp.id,
-                                                titulo: bp.titulo,
-                                                descripcion: bp.subtitulo,
-                                                imagenUrl: bp.imagenUrl,
-                                                badge: bp.badge || 'PROMO'
-                                            })}
-                                            className="bg-amber-400 hover:bg-amber-500 text-stone-900 font-bold text-[11px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-md transition cursor-pointer w-full text-center"
-                                        >
-                                            Aprovechar ➔
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-
-                            {/* Promociones Activas de la Base de Datos */}
-                            {promotions.map((promo, idx) => {
-                                const gradientClass = PROMO_GRADIENTS[idx % PROMO_GRADIENTS.length];
-
-                                return (
-                                    <div
-                                        key={`promo-${promo.id}`}
-                                        className={`relative rounded-2xl overflow-hidden shadow-sm border border-stone-200 p-4 text-white flex flex-col justify-between min-w-[280px] max-w-[280px] h-44 shrink-0 transition-all hover:shadow-md ${!promo.imagenUrl ? `bg-gradient-to-br ${gradientClass}` : 'bg-stone-900'}`}
-                                        style={
-                                            promo.imagenUrl
-                                                ? {
-                                                    backgroundImage: `url(${promo.imagenUrl})`,
-                                                    backgroundSize: 'cover',
-                                                    backgroundPosition: 'center',
-                                                }
-                                                : undefined
-                                        }
-                                    >
-                                        {promo.imagenUrl && (
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/50 to-black/20 z-0"></div>
-                                        )}
-
-                                        <div className="relative z-10 space-y-1">
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="bg-amber-400 text-stone-900 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                                    {promo.badge || 'Oferta'}
-                                                </span>
-                                                {promo.stock !== undefined && (
-                                                    <span className="bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-full backdrop-blur-xs">
-                                                        📦 Quedan: {promo.stock}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <h3 className="text-sm font-black tracking-tight leading-snug drop-shadow">{promo.titulo}</h3>
-                                            {promo.descripcion && (
-                                                <p className="text-[11px] text-stone-200 line-clamp-1 drop-shadow">{promo.descripcion}</p>
-                                            )}
-                                        </div>
-
-                                        <div className="relative z-10 pt-2 flex items-center justify-between border-t border-white/10 mt-auto">
-                                            <span className="text-[10px] text-amber-300 font-bold">
-                                                {promo.hasta ? '⏱️ Limitado' : '✨ Exclusivo'}
-                                            </span>
-
-                                            <button
-                                                onClick={() => handleOpenPromoModal(promo)}
-                                                className="bg-amber-400 hover:bg-amber-500 text-stone-900 font-bold text-[11px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-md transition cursor-pointer"
-                                            >
-                                                Aprovechar ➔
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        <button
-                            onClick={() => scrollPromos('right')}
-                            className="absolute right-[-16px] top-1/2 -translate-y-1/2 z-20 bg-white border border-stone-200 hover:bg-emerald-50 text-stone-800 w-11 h-11 rounded-full shadow-md transition flex items-center justify-center font-bold cursor-pointer text-base"
-                            aria-label="Siguiente"
-                        >
-                            ❯
-                        </button>
-                    </div>
-                </section>
-            )}
-
-            {/* 5. SECCIÓN DE PRODUCTOS DESTACADOS / FILTRADOS */}
+            {/* 4. SECCIÓN DE PRODUCTOS DESTACADOS / FILTRADOS */}
             <section className="max-w-7xl w-full mx-auto px-6 py-8 shrink-0">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 border-b border-stone-200 pb-3 gap-4">
                     <div>
@@ -663,15 +534,12 @@ function TiendaContent() {
                     </div>
 
                     {!categoriaSeleccionada && (
-                        /* { */
                         <div className="pt-2 md:pt-0">
                             <Link href="/tienda/catalogo" className="text-[11px] font-bold bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2 rounded-xl transition shadow-xs inline-flex items-center gap-1">
                                 Ver catálogo completo ➔
                             </Link>
                         </div>
-                        /* } */
                     )}
-
                 </div>
 
                 {productosFiltrados.length === 0 ? (
@@ -688,13 +556,13 @@ function TiendaContent() {
                         )}
                     </div>
                 ) : (
+                    
 
-
-                    <ProductCarousel products={productosFiltrados} whatsappNumber={WHATSAPP_NUMBER} />
+<ProductCarousel products={productosFiltrados} whatsappNumber={WHATSAPP_NUMBER} />
                 )}
             </section>
 
-            {/* 6. SECCIÓN INSTITUCIONAL Y UBICACIÓN */}
+            {/* 5. SECCIÓN INSTITUCIONAL Y UBICACIÓN */}
             <section className="max-w-7xl w-full mx-auto px-6 py-8 shrink-0">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
                     <div
@@ -769,7 +637,7 @@ function TiendaContent() {
                 </div>
             </section>
 
-            {/* 7. SECCIÓN DE RESEÑAS */}
+            {/* 6. SECCIÓN DE RESEÑAS */}
             <section className="max-w-7xl w-full mx-auto px-6 py-10 shrink-0 border-t border-stone-200 mt-auto space-y-6 overflow-hidden">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-stone-200/80 shadow-xs">
                     <div>

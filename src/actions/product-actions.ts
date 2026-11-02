@@ -27,6 +27,7 @@ export interface SaveProductInput {
     cost?: number;
     otherCosts?: number;
     margin?: number;
+    customMargin?: boolean;
     taxRate?: number;
     price?: number;
     stock?: number;
@@ -34,7 +35,10 @@ export interface SaveProductInput {
     description?: string;
     imageUrl?: string;
     trackStock?: boolean;
-    destacado?: boolean; // <-- 1. Agregado aquí para que TypeScript lo reconozca
+    destacado?: boolean;
+    color?: string | null;
+    tamano?: string | null;
+    stockWeb?: number;
 }
 
 // ----------------------------------------------------------------------
@@ -78,19 +82,63 @@ export async function createCategory(data: { name: string; defaultMargin: number
     }
 }
 
-export async function deleteCategory(id: string) {
+export async function updateCategory(data: { id: string; name: string; defaultMargin: number }) {
     try {
-        const productsCount = await prisma.product.count({ where: { categoryId: id } });
-        if (productsCount > 0) {
-            return { error: `No se puede eliminar la categoría porque tiene ${productsCount} producto(s) asociado(s).` };
+        const cleanName = data.name.trim().toUpperCase();
+        if (!cleanName) return { error: 'El nombre de la categoría es obligatorio.' };
+
+        // Verificar si ya existe otra categoría con el mismo nombre
+        const existing = await prisma.category.findFirst({
+            where: { name: cleanName, NOT: { id: data.id } },
+        });
+        if (existing) {
+            return { error: 'Ya existe otra categoría con ese nombre.' };
         }
 
-        await prisma.category.delete({ where: { id } });
+        const newMargin = Number(data.defaultMargin ?? 30);
+
+        // 1. Actualizamos la categoría
+        const category = await prisma.category.update({
+            where: { id: data.id },
+            data: {
+                name: cleanName,
+                defaultMargin: newMargin,
+            },
+        });
+
+        // 2. ACTUALIZACIÓN EN BLOQUE: 
+        // Actualizamos el margen y recalculamos el precio final de todos los productos 
+        // de esta categoría que NO tengan el margen manual activado (customMargin = false)
+        const productosAfectados = await prisma.product.findMany({
+            where: {
+                categoryId: data.id,
+                customMargin: false
+            }
+        });
+
+        for (const prod of productosAfectados) {
+            const baseCost = Number(prod.cost) + Number(prod.otherCosts);
+            let subtotalNoTax = newMargin >= 100 ? baseCost * (1 + newMargin / 100) : baseCost / (1 - (newMargin / 100));
+            const finalWithTax = subtotalNoTax * (1 + Number(prod.taxRate) / 100);
+            const newPrice = Math.round(finalWithTax);
+
+            await prisma.product.update({
+                where: { id: prod.id },
+                data: {
+                    margin: newMargin,
+                    price: newPrice
+                }
+            });
+        }
+
         revalidateTag('categories');
-        return { success: true };
+        revalidatePath('/productos');
+        revalidatePath('/tienda');
+
+        return { success: true, category };
     } catch (error) {
-        console.error('Error al eliminar categoría:', error);
-        return { error: 'No se pudo eliminar la categoría.' };
+        console.error('Error en updateCategory:', error);
+        return { error: 'Error al actualizar la categoría y sus productos.' };
     }
 }
 
@@ -176,6 +224,7 @@ export async function getProducts() {
             taxRate: Number(p.taxRate),
             stock: Number(p.stock),
             minStock: Number(p.minStock),
+            stockWeb: Number(p.stockWeb),
         }));
 
         return products;
@@ -225,22 +274,15 @@ export async function saveProduct(data: SaveProductInput) {
 
         let finalCode = data.code?.trim().toUpperCase();
 
-        console.log('--- DEBUG SAVE PRODUCT ---');
-        console.log('ID del producto:', data.id);
-        console.log('Categoría seleccionada en el formulario:', data.categoryId);
-
         if (data.id) {
             const existingProduct = await prisma.product.findUnique({
                 where: { id: data.id },
                 select: { categoryId: true, code: true }
             });
 
-            console.log('Categoría anterior en BD:', existingProduct?.categoryId);
-
             if (existingProduct) {
                 if (existingProduct.categoryId !== data.categoryId) {
                     finalCode = await generateNextProductCode(data.categoryId);
-                    console.log('¡Categoría cambiada! Nuevo código generado:', finalCode);
                 } else if (!finalCode) {
                     finalCode = existingProduct.code;
                 }
@@ -251,7 +293,6 @@ export async function saveProduct(data: SaveProductInput) {
             finalCode = await generateNextProductCode(data.categoryId);
         }
 
-        // --- GESTIÓN DE IMAGEN CON CLOUDINARY Y CARPETAS POR CATEGORÍA ---
         let finalImageUrl = data.imageUrl || null;
 
         if (finalImageUrl && finalImageUrl.startsWith('data:image/')) {
@@ -280,39 +321,52 @@ export async function saveProduct(data: SaveProductInput) {
                 return { error: 'No se pudo subir la imagen a la nube. Intenta nuevamente.' };
             }
         }
-        // ----------------------------------------------------------------
 
         const productData = {
-            name,
-            code: finalCode,
-            categoryId: data.categoryId,
-            supplierId: data.supplierId || null,
-            description: data.description || null,
-            imageUrl: finalImageUrl,
-            cost: Math.round(data.cost ?? 0),
-            otherCosts: Math.round(data.otherCosts ?? 0),
-            margin: Math.round(data.margin ?? 0),
-            taxRate: data.taxRate ?? 0,
-            price: Math.round(data.price ?? 0),
-            stock: Math.round(data.stock ?? 0),
-            minStock: Math.round(data.minStock ?? 2),
-            trackStock: data.trackStock ?? true,
-            destacado: Boolean(data.destacado), // <-- 2. Mapeado y convertido a booleano para Prisma
+            name: name.trim().toUpperCase(),
+            code,
+            category: {
+                connect: { id: categoryId }
+            },
+            // 👇 SOLUCIÓN: Solo agregamos 'supplier' si realmente seleccionaron uno
+            ...(supplierId ? {
+                supplier: {
+                    connect: { id: supplierId }
+                }
+            } : {}),
+            cost: Number(cost) || 0,
+            otherCosts: Number(otherCosts) || 0,
+            margin: Number(margin) || 0,
+            customMargin: Boolean(customMargin),
+            taxRate: Number(taxRate) || 0,
+            price: Number(price) || 0,
+            stock: Number(stock) || 0,
+            minStock: Number(minStock) || 0,
+            destacado: Boolean(destacado),
+            color: color ? color.trim().toUpperCase() : null,
+            tamano: tamano ? tamano.trim().toUpperCase() : null,
+            stockWeb: stockWeb !== '' ? Number(stockWeb) : Number(stock) || 0,
+            imageUrl: imageUrl.trim() || '/sinfoto.png'
         };
 
-        if (data.id) {
+        // Luego ejecutás el create o update según corresponda:
+        if (id) {
             await prisma.product.update({
-                where: { id: data.id },
-                data: productData,
+                where: { id },
+                data: {
+                    ...productData,
+                    // En el update SÍ se puede usar disconnect si no hay proveedor:
+                    supplier: supplierId ? { connect: { id: supplierId } } : { disconnect: true }
+                }
             });
         } else {
             await prisma.product.create({
-                data: productData,
+                data: productData
             });
         }
-        // --- AGREGAR ESTO PARA FRESCA LA CACHÉ ---
-        revalidatePath('/');       // Limpia la caché de la landing page
-        revalidatePath('/tienda'); // Limpia la caché de la tienda
+
+        revalidatePath('/');
+        revalidatePath('/tienda');
 
         return { success: true };
     } catch (error: any) {
@@ -353,10 +407,11 @@ export async function importProductsBatch(productsData: any[]) {
 
             const cost = Math.round(parseFloat(raw.CostoBase || raw.cost) || 0);
             const otherCosts = Math.round(parseFloat(raw.FleteOtros || raw.otherCosts) || 0);
-            const margin = Math.round(parseFloat(raw.Margen || raw.margin) || 30);
-            const taxRate = parseFloat(raw.IVA || raw.taxRate) || 0;
+            const margin = parseFloat(raw.Margen || raw.margin) || 100;
+            const taxRate = parseFloat(raw.IVA || raw.taxRate) || 21;
             const price = Math.round(parseFloat(raw.PrecioFinal || raw.price) || 0);
             const stock = Math.round(parseInt(raw.Stock || raw.stock) || 0);
+            const stockWeb = Math.round(parseInt(raw.StockWeb || raw.stockWeb || stock) || 0);
             const minStock = Math.round(parseInt(raw.StockMinimo || raw.minStock) || 2);
             const code = raw.Codigo || raw.code || (await generateNextProductCode(category.id));
 
@@ -372,20 +427,22 @@ export async function importProductsBatch(productsData: any[]) {
                     taxRate,
                     price,
                     stock,
+                    stockWeb,
                     minStock,
-                    categoryId: category.id,
+                    category: { connect: { id: category.id } },
                     imageUrl,
                 },
                 create: {
                     code,
                     name: name.toUpperCase(),
-                    categoryId: category.id,
+                    category: { connect: { id: category.id } },
                     cost,
                     otherCosts,
                     margin,
                     taxRate,
                     price,
                     stock,
+                    stockWeb,
                     minStock,
                     imageUrl,
                 },

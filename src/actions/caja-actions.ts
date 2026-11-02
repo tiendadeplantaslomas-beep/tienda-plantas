@@ -11,12 +11,16 @@ export interface DailySalesFilter {
 export async function getCajaSummary(filterDate?: string) {
     try {
         const targetDate = filterDate ? new Date(filterDate + 'T00:00:00') : new Date();
+        const dateStr = filterDate || new Date().toISOString().split('T')[0];
 
         const startOfDay = new Date(targetDate);
         startOfDay.setHours(0, 0, 0, 0);
 
         const endOfDay = new Date(targetDate);
         endOfDay.setHours(23, 59, 59, 999);
+
+        // Verificar si este día ya está cerrado/bloqueado
+        const dayLocked = await isDayClosed(dateStr);
 
         // A. Consultar Ventas del día
         const sales = await prisma.sale.findMany({
@@ -52,7 +56,7 @@ export async function getCajaSummary(filterDate?: string) {
             },
         });
 
-        // Totales desglosados por método de pago según el enum PaymentMethod
+        // Totales desglosados por medio de pago según el enum PaymentMethod
         const totals = {
             EFECTIVO: 0,
             TRANSFERENCIA: 0,
@@ -84,8 +88,12 @@ export async function getCajaSummary(filterDate?: string) {
             }
         });
 
-        // Efectivo disponible en caja = (Efectivo por ventas + Ingresos caja) - Egresos
-        totals.EFECTIVO_EN_CAJA_NETO = totals.EFECTIVO + totals.INGRESOS_MANUALES - totals.EGRESOS_MANUALES;
+        // Si el día está cerrado, el efectivo neto en caja se blanquea a 0; de lo contrario se calcula normal
+        if (dayLocked) {
+            totals.EFECTIVO_EN_CAJA_NETO = 0;
+        } else {
+            totals.EFECTIVO_EN_CAJA_NETO = totals.EFECTIVO + totals.INGRESOS_MANUALES - totals.EGRESOS_MANUALES;
+        }
 
         return {
             success: true,
@@ -139,7 +147,6 @@ export async function createCashMovement(payload: {
         }
 
         // 3. Ajuste de monto: Si es EGRESO, guardamos en negativo. 
-        // Usamos redondeo a 2 decimales para preservar centavos correctamente en lugar de Math.round entero.
         const cleanAmount = Number(amount.toFixed(2));
         const finalAmount = type === 'EGRESO' ? -Math.abs(cleanAmount) : Math.abs(cleanAmount);
 
