@@ -71,13 +71,13 @@ model Product {
 
   promotions      Promotion[]      @relation("PromotionProducts")
 
-    // Costos y Precios
+  // Costos y Precios
   cost            Int          
-  otherCosts      Int              @default(0) 
+  otherCosts      Int              @default(0) // Desagregado de fletes/gastos por unidad
   price           Int              // Precio base o regular
   precioOferta    Int?             // Precio promocional o de oferta para la web
   margin          Float            @default(100)
-  customMargin    Boolean          @default(false) // 👈 Nuevo: indica si el margen es manual/personalizado
+  customMargin    Boolean          @default(false) 
   taxRate         Float            @default(21)
   
   // Control de Stock Separado (Físico vs Web)
@@ -89,7 +89,7 @@ model Product {
   // Atributos para la Ficha y Variantes (Estilo Vivero)
   tamano          String?          // Ej: "Nº 21", "3 Litros"
   color           String?          // Ej: "Terracota", "Verde", "Blanco"
-  variantes       ProductVariant[] // Relación con múltiples tamaños/colores
+  variantes       ProductVariant[] 
   
   destacado       Boolean          @default(false)
   createdAt       DateTime         @default(now())
@@ -106,10 +106,10 @@ model ProductVariant {
   product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   
   sku          String?  @unique
-  color        String?  // Ej: Terracota, Barro, Blanco
-  tamano       String?  // Ej: N° 13, N° 15, N° 21
-  price        Int      // Precio específico para esta variante
-  stockWeb     Int      @default(0) // Stock web específico de esta variante
+  color        String?  
+  tamano       String?  
+  price        Int      
+  stockWeb     Int      @default(0) 
   
   createdAt    DateTime @default(now())
   updatedAt    DateTime @default(now()) @updatedAt
@@ -131,7 +131,21 @@ model StockMovement {
 }
 
 // -------------------------------------------------------------
-// COMPRAS EN LOTE
+// LOTE GLOBAL DE COMPRAS / SESIÓN DE SALIDA
+// -------------------------------------------------------------
+model PurchaseBatch {
+  id               String     @id @default(cuid())
+  date             DateTime   @default(now())
+  freightCostTotal Int        @default(0) // Flete / Gastos globales del viaje
+  notes            String?
+  status           String     @default("PENDIENTE") // PENDIENTE (Stand-by) / RECIBIDO
+  createdAt        DateTime   @default(now())
+
+  purchases        Purchase[]
+}
+
+// -------------------------------------------------------------
+// COMPRAS EN LOTE (COMPROBANTES INDIVIDUALES)
 // -------------------------------------------------------------
 model Purchase {
   id              String         @id @default(cuid())
@@ -142,8 +156,12 @@ model Purchase {
   supplierId      String
   supplier        Supplier       @relation(fields: [supplierId], references: [id])
   
+  // Vínculo con el Lote Global de Salida
+  batchId         String?
+  batch           PurchaseBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
   subtotal        Int            
-  otherCostsTotal Int            @default(0) 
+  otherCostsTotal Int            @default(0) // Cuota de flete prorrateada para este comprobante
   total           Int            
 
   notes           String?
@@ -153,7 +171,7 @@ model Purchase {
 }
 
 // -------------------------------------------------------------
-// COMPRAS
+// ÍTEMS DE COMPRA
 // -------------------------------------------------------------
 model PurchaseItem {
   id                 String   @id @default(cuid())
@@ -188,7 +206,6 @@ model Customer {
   created_at         DateTime @default(now())
   role               String   @default("cliente_web")
 
-  // Relaciones con otras tablas del sistema
   sales              Sale[]
   payments           Payment[]
   customerPromotions CustomerPromotion[]
@@ -274,9 +291,7 @@ model Sale {
 
   items            SaleItem[]
   payments         Payment[]     
-  
-  // Relación con los reclamos
-  claims        Claim[]
+  claims           Claim[]
 }
 
 // -------------------------------------------------------------
@@ -348,7 +363,7 @@ model Banner {
   id           Int      @id @default(autoincrement())
   seccion      String
   titulo       String?  @db.VarChar(255)
-  subtitulo    String?  @db.Text // <-- Cambiado a @db.Text para soportar textos largos
+  subtitulo    String?  @db.Text 
   imagenUrl    String   @db.LongText
   link         String?  @db.VarChar(500)
   badge        String?  @db.VarChar(100)
@@ -403,9 +418,9 @@ model Claim {
   id          String    @id @default(cuid())
   saleId      String
   sale        Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  reason      String    // Motivo del reclamo
-  resolution  String?   // Nota de resolución
-  status      String    @default("ABIERTO") // ABIERTO / RESUELTO / REGISTRADO
+  reason      String    
+  resolution  String?   
+  status      String    @default("ABIERTO") 
   createdAt   DateTime  @default(now())
   resolvedAt  DateTime?
 }

@@ -2,208 +2,256 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { generateNextProductCode } from './product-actions';
 
-export interface PurchaseItemInput {
+export interface SinglePurchaseItemInput {
     productId?: string;
     code: string;
     name: string;
-    categoryId?: string;
+    categoryId: string;
     quantity: number;
     unitCost: number;
     margin?: number;
+    tamano?: string;
+    color?: string;
 }
 
-export interface CreatePurchasePayload {
+export interface SingleInvoiceInput {
     supplierId?: string;
     supplierName?: string;
     docType: 'FACTURA' | 'REMITO' | 'PRESUPUESTO';
     docNumber?: string;
     date?: string;
-    otherCostsTotal: number;
     notes?: string;
-    userId?: string;
-    paymentMethod?: 'EFECTIVO' | 'TRANSFERENCIA' | 'CREDITO' | 'DEBITO' | 'MERCADOPAGO';
-    items: PurchaseItemInput[];
+    items: SinglePurchaseItemInput[];
 }
 
-export async function createPurchase(payload: CreatePurchasePayload) {
+export interface CreateBatchPurchasePayload {
+    freightCostTotal: number;
+    notes?: string;
+    invoices: SingleInvoiceInput[];
+}
+
+export async function createQuickProduct(data: {
+    name: string;
+    categoryId: string;
+    cost: number;
+    tamano?: string;
+    color?: string;
+}) {
     try {
-        const { supplierId, supplierName, docType, docNumber, date, otherCostsTotal, notes, userId, paymentMethod, items } = payload;
-
-        if (!items || items.length === 0) {
-            return { error: 'Debes incluir al menos un producto en la carga.' };
+        const cleanName = data.name.trim().toUpperCase();
+        if (!cleanName || !data.categoryId) {
+            return { error: 'El nombre y la categoría son obligatorios.' };
         }
 
-        let finalSupplierId = supplierId;
-        if (!finalSupplierId && supplierName) {
-            const existingSupplier = await prisma.supplier.findFirst({
-                where: { name: { equals: supplierName.trim() } }
-            });
-            if (existingSupplier) {
-                finalSupplierId = existingSupplier.id;
-            } else {
-                const newSupplier = await prisma.supplier.create({
-                    data: { name: supplierName.trim() }
-                });
-                finalSupplierId = newSupplier.id;
+        const category = await prisma.category.findUnique({
+            where: { id: data.categoryId }
+        });
+
+        if (!category) {
+            return { error: 'La categoría seleccionada no existe.' };
+        }
+
+        const margin = category.defaultMargin || 100;
+        const code = await generateNextProductCode(data.categoryId);
+        const cost = Number(data.cost) || 0;
+        const price = Math.round(cost * (1 + margin / 100));
+
+        const newProduct = await prisma.product.create({
+            data: {
+                code,
+                name: cleanName,
+                categoryId: data.categoryId,
+                cost,
+                otherCosts: 0,
+                margin,
+                price,
+                stock: 0,
+                trackStock: true,
+                tamano: data.tamano ? data.tamano.trim().toUpperCase() : null,
+                color: data.color ? data.color.trim().toUpperCase() : null,
+                imageUrl: 'https://res.cloudinary.com/mfzvsfah/image/upload/v1787528074/sinfoto.jpg'
             }
+        });
+
+        revalidatePath('/productos');
+        revalidatePath('/compras');
+
+        return {
+            success: true,
+            product: {
+                id: newProduct.id,
+                code: newProduct.code,
+                name: newProduct.name,
+                cost: Number(newProduct.cost),
+                price: Number(newProduct.price),
+                stock: Number(newProduct.stock),
+                margin: Number(newProduct.margin),
+                categoryId: newProduct.categoryId
+            }
+        };
+    } catch (error: any) {
+        console.error('Error al crear producto al vuelo:', error);
+        return { error: error.message || 'Error al dar de alta el producto.' };
+    }
+}
+
+export async function createSupplier(data: { name: string; phone?: string; address?: string; notes?: string }) {
+    try {
+        const cleanName = data.name.trim().toUpperCase();
+        if (!cleanName) return { error: 'El nombre del proveedor es obligatorio.' };
+
+        const existing = await prisma.supplier.findFirst({
+            where: { name: cleanName },
+        });
+        if (existing) {
+            return { error: 'Ya existe un proveedor con ese nombre.' };
         }
 
-        if (!finalSupplierId) {
-            return { error: 'Debes seleccionar o ingresar un proveedor válido.' };
+        const supplier = await prisma.supplier.create({
+            data: {
+                name: cleanName,
+                phone: data.phone || null,
+                address: data.address || null,
+                notes: data.notes || null,
+            },
+        });
+
+        revalidatePath('/compras');
+        return { success: true, supplier };
+    } catch (error) {
+        console.error('Error en createSupplier:', error);
+        return { error: 'Error al crear el proveedor.' };
+    }
+}
+
+export async function createPurchaseBatch(payload: CreateBatchPurchasePayload) {
+    try {
+        const { freightCostTotal, notes, invoices } = payload;
+
+        if (!invoices || invoices.length === 0) {
+            return { error: 'Debe incluir al menos un comprobante en el lote.' };
         }
 
-        const totalUnits = items.reduce((acc, item) => acc + Number(item.quantity), 0);
-        const fletePerUnit = totalUnits > 0 ? Math.round(Number(otherCostsTotal) / totalUnits) : 0;
+        let totalBatchUnits = 0;
+        invoices.forEach(inv => {
+            inv.items.forEach(item => {
+                totalBatchUnits += Number(item.quantity) || 0;
+            });
+        });
 
-        // Pasamos la configuración de timeout (20 segundos) como segundo parámetro a $transaction
+        if (totalBatchUnits <= 0) {
+            return { error: 'El lote no contiene cantidades válidas de productos.' };
+        }
+
+        const freightPerUnit = Math.round((Number(freightCostTotal) || 0) / totalBatchUnits);
+
         const result = await prisma.$transaction(
             async (tx) => {
+                const batch = await tx.purchaseBatch.create({
+                    data: {
+                        freightCostTotal: Number(freightCostTotal) || 0,
+                        notes: notes || 'SALIDA DE COMPRAS MULTI-PROVEEDOR',
+                        status: 'PENDIENTE'
+                    }
+                });
 
-                // 1. Calcular el costo total preliminar para validaciones de caja
-                const preliminarySubtotal = items.reduce((acc, item) => acc + (Number(item.quantity) * Number(item.unitCost)), 0);
-                const totalPurchaseCost = preliminarySubtotal + Number(otherCostsTotal);
+                for (const inv of invoices) {
+                    let finalSupplierId = inv.supplierId;
 
-                // 2. Si se paga en EFECTIVO, validar caja abierta y registrar egreso automático
-                if (paymentMethod === 'EFECTIVO') {
-                    if (!userId) {
-                        throw new Error("Se requiere el ID del usuario para registrar compras pagadas en efectivo.");
+                    if (!finalSupplierId && inv.supplierName) {
+                        const existingSup = await tx.supplier.findFirst({
+                            where: { name: inv.supplierName.trim().toUpperCase() }
+                        });
+                        if (existingSup) {
+                            finalSupplierId = existingSup.id;
+                        } else {
+                            const newSup = await tx.supplier.create({
+                                data: { name: inv.supplierName.trim().toUpperCase() }
+                            });
+                            finalSupplierId = newSup.id;
+                        }
                     }
 
-                    // Se consulta usando cashClosure / cashMovement según esquema prisma
-                    const activeShift = await tx.cashMovement.findFirst({
-                        where: { type: 'INGRESO' } // O la consulta correspondiente si manejas cashShift
-                    });
-
-                    await tx.cashMovement.create({
-                        data: {
-                            type: 'EGRESO',
-                            description: `PAGO COMPRA ${docType} N° ${docNumber || 'S/N'} (${supplierName || 'PROVEEDOR'})`,
-                            amount: -Math.abs(totalPurchaseCost),
-                        }
-                    });
-                }
-
-                let subtotal = 0;
-                const processedItems = [];
-
-                for (const item of items) {
-                    let product;
-
-                    if (item.productId) {
-                        product = await tx.product.findUnique({ where: { id: item.productId } });
-                    } else if (item.code) {
-                        product = await tx.product.findUnique({ where: { code: item.code.trim() } });
+                    if (!finalSupplierId) {
+                        throw new Error(`Proveedor no válido para el comprobante ${inv.docNumber || 'S/N'}.`);
                     }
 
-                    if (!product) {
-                        let catId = item.categoryId;
-                        if (!catId) {
-                            const defaultCat = await tx.category.findFirst();
-                            if (!defaultCat) {
-                                throw new Error('No hay categorías creadas en el sistema para dar de alta un producto nuevo.');
-                            }
-                            catId = defaultCat.id;
+                    let invSubtotal = 0;
+                    let invFreightTotal = 0;
+                    const processedItems = [];
+
+                    for (const item of inv.items) {
+                        const product = await tx.product.findUnique({ where: { id: item.productId } });
+                        if (!product) {
+                            throw new Error(`El producto con ID ${item.productId} no existe en la base de datos.`);
                         }
 
-                        const itemMargin = item.margin || 100;
-                        const itemCost = Number(item.unitCost);
-                        const itemOtherCosts = fletePerUnit;
-                        const calculatedPrice = Math.round((itemCost + itemOtherCosts) * (1 + itemMargin / 100));
+                        const qty = Number(item.quantity);
+                        const unitCost = Number(item.unitCost);
+                        const itemSubtotal = qty * unitCost;
+                        invSubtotal += itemSubtotal;
 
-                        product = await tx.product.create({
+                        const allocatedOtherCost = freightPerUnit;
+                        const itemFreightTotal = allocatedOtherCost * qty;
+                        invFreightTotal += itemFreightTotal;
+
+                        const finalUnitCost = unitCost + allocatedOtherCost;
+                        const updatedPrice = Math.round(finalUnitCost * (1 + (product.margin || 100) / 100));
+
+                        await tx.product.update({
+                            where: { id: product.id },
                             data: {
-                                code: item.code.trim(),
-                                name: item.name.trim(),
-                                categoryId: catId,
-                                supplierId: finalSupplierId,
-                                cost: itemCost,
-                                otherCosts: itemOtherCosts,
-                                margin: itemMargin,
-                                price: calculatedPrice,
-                                stock: 0,
-                                trackStock: true,
+                                cost: unitCost,
+                                otherCosts: allocatedOtherCost,
+                                price: updatedPrice,
+                                supplierId: finalSupplierId
                             }
+                        });
+
+                        processedItems.push({
+                            productId: product.id,
+                            quantity: qty,
+                            unitCost: unitCost,
+                            allocatedOtherCost: allocatedOtherCost,
+                            finalUnitCost: finalUnitCost
                         });
                     }
 
-                    const qty = Number(item.quantity);
-                    const unitCost = Number(item.unitCost);
-                    const itemSubtotal = qty * unitCost;
-                    subtotal += itemSubtotal;
+                    const invTotal = invSubtotal + invFreightTotal;
 
-                    const allocatedOtherCost = fletePerUnit;
-                    const finalUnitCost = unitCost + allocatedOtherCost;
-
-                    const newStock = product.stock + qty;
-                    const updatedPrice = Math.round((unitCost + allocatedOtherCost) * (1 + product.margin / 100));
-
-                    await tx.product.update({
-                        where: { id: product.id },
+                    await tx.purchase.create({
                         data: {
-                            cost: unitCost,
-                            otherCosts: allocatedOtherCost,
-                            price: updatedPrice,
-                            stock: newStock,
+                            batchId: batch.id,
+                            docType: inv.docType,
+                            docNumber: inv.docNumber || null,
+                            date: inv.date ? new Date(inv.date) : new Date(),
                             supplierId: finalSupplierId,
+                            subtotal: invSubtotal,
+                            otherCostsTotal: invFreightTotal,
+                            total: invTotal,
+                            notes: inv.notes || null,
+                            items: {
+                                create: processedItems
+                            }
                         }
-                    });
-
-                    await tx.stockMovement.create({
-                        data: {
-                            productId: product.id,
-                            quantity: qty,
-                            type: 'PURCHASE',
-                            notes: `Ingreso por ${docType} N° ${docNumber || 'S/N'} (${supplierName || 'Proveedor'})`,
-                            previousStock: product.stock,
-                            newStock: newStock,
-                        }
-                    });
-
-                    processedItems.push({
-                        productId: product.id,
-                        quantity: qty,
-                        unitCost: unitCost,
-                        allocatedOtherCost: allocatedOtherCost,
-                        finalUnitCost: finalUnitCost,
                     });
                 }
 
-                const totalPurchase = subtotal + Number(otherCostsTotal);
-
-                const purchase = await tx.purchase.create({
-                    data: {
-                        docType,
-                        docNumber: docNumber || null,
-                        date: date ? new Date(date) : new Date(),
-                        supplierId: finalSupplierId!,
-                        subtotal,
-                        otherCostsTotal: Number(otherCostsTotal),
-                        total: totalPurchase,
-                        notes: notes || null,
-                        items: {
-                            create: processedItems
-                        }
-                    }
-                });
-
-                return purchase;
+                return batch;
             },
-            {
-                maxWait: 10000, // Máximo tiempo de espera para obtener conexión (10s)
-                timeout: 30000   // Límite de tiempo para ejecutar la transacción entera (30s)
-            }
+            { maxWait: 10000, timeout: 30000 }
         );
 
         revalidatePath('/productos');
-        revalidatePath('/stock');
         revalidatePath('/compras');
-        revalidatePath('/caja');
+        revalidatePath('/stock');
 
-        return { success: true, purchaseId: result.id };
+        return { success: true, batchId: result.id };
     } catch (error: any) {
-        console.error('Error al registrar compra:', error);
-        return { error: error.message || 'Error al procesar la carga del comprobante.' };
+        console.error('Error al registrar lote de compras:', error);
+        return { error: error.message || 'Error al procesar la salida de compras.' };
     }
 }
 
@@ -234,43 +282,80 @@ export async function getCategoriesForSelect() {
 export async function getPurchasesHistory(filters?: { startDate?: string; endDate?: string; supplierId?: string }) {
     try {
         const where: any = {};
-
-        if (filters?.startDate || filters?.endDate) {
-            where.date = {};
-            if (filters.startDate) {
-                where.date.gte = new Date(`${filters.startDate}T00:00:00.000Z`);
-            }
-            if (filters.endDate) {
-                where.date.lte = new Date(`${filters.endDate}T23:59:59.999Z`);
-            }
+        if (filters?.startDate && filters?.endDate) {
+            where.date = {
+                gte: new Date(filters.startDate),
+                lte: new Date(filters.endDate + 'T23:59:59.999Z')
+            };
         }
-
         if (filters?.supplierId) {
             where.supplierId = filters.supplierId;
         }
 
-        const purchases = await prisma.purchase.findMany({
+        return await prisma.purchase.findMany({
             where,
             include: {
-                supplier: {
-                    select: { name: true }
-                },
+                supplier: { select: { name: true } },
+                batch: { select: { status: true } },
                 items: {
                     include: {
-                        product: {
-                            select: { code: true, name: true }
-                        }
+                        product: { select: { code: true, name: true } }
                     }
                 }
             },
-            orderBy: {
-                date: 'desc'
+            orderBy: { date: 'desc' }
+        });
+    } catch (error) {
+        console.error('Error al obtener historial:', error);
+        return [];
+    }
+}
+
+export async function receivePurchaseBatch(purchaseId: string) {
+    try {
+        const purchase = await prisma.purchase.findUnique({
+            where: { id: purchaseId },
+            include: {
+                batch: true,
+                items: true
             }
         });
 
-        return purchases;
-    } catch (error) {
-        console.error('Error al obtener historial de compras:', error);
-        return [];
+        if (!purchase) {
+            return { error: 'No se encontró el comprobante de compra.' };
+        }
+
+        if (purchase.batch?.status === 'RECIBIDO') {
+            return { error: 'Este lote/comprobante ya fue recibido previamente.' };
+        }
+
+        await prisma.$transaction(async (tx) => {
+            if (purchase.batchId) {
+                await tx.purchaseBatch.update({
+                    where: { id: purchase.batchId },
+                    data: { status: 'RECIBIDO' }
+                });
+            }
+
+            for (const item of purchase.items) {
+                await tx.product.update({
+                    where: { id: item.productId },
+                    data: {
+                        stock: {
+                            increment: item.quantity
+                        }
+                    }
+                });
+            }
+        });
+
+        revalidatePath('/compras/historial');
+        revalidatePath('/productos');
+        revalidatePath('/stock');
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error al recibir la compra:', error);
+        return { error: error.message || 'Error al procesar la recepción de mercadería.' };
     }
 }
