@@ -22,6 +22,9 @@ export interface SingleInvoiceInput {
     docType: 'FACTURA' | 'REMITO' | 'PRESUPUESTO';
     docNumber?: string;
     date?: string;
+    paymentMethod?: 'CONTADO' | 'TRANSFERENCIA';
+    applyCommission6?: boolean;
+    applyVat21?: boolean;
     notes?: string;
     items: SinglePurchaseItemInput[];
 }
@@ -219,7 +222,21 @@ export async function createPurchaseBatch(payload: CreateBatchPurchasePayload) {
                         });
                     }
 
-                    const invTotal = invSubtotal + invFreightTotal;
+                    const paymentMethod = inv.paymentMethod || 'CONTADO';
+                    const commissionAmount = paymentMethod === 'TRANSFERENCIA' && inv.applyCommission6
+                        ? Math.round(invSubtotal * 0.06)
+                        : 0;
+                    const vatAmount = paymentMethod === 'TRANSFERENCIA' && inv.applyVat21
+                        ? Math.round(invSubtotal * 0.21)
+                        : 0;
+
+                    const invTotal = invSubtotal + invFreightTotal + commissionAmount + vatAmount;
+
+                    const paymentSummary = paymentMethod === 'TRANSFERENCIA'
+                        ? `Pago: TRANSFERENCIA (Com. 6%: $${commissionAmount.toLocaleString('es-AR')} | IVA 21%: $${vatAmount.toLocaleString('es-AR')})`
+                        : 'Pago: CONTADO';
+
+                    const combinedNotes = [paymentSummary, inv.notes].filter(Boolean).join(' | ');
 
                     await tx.purchase.create({
                         data: {
@@ -231,7 +248,7 @@ export async function createPurchaseBatch(payload: CreateBatchPurchasePayload) {
                             subtotal: invSubtotal,
                             otherCostsTotal: invFreightTotal,
                             total: invTotal,
-                            notes: inv.notes || null,
+                            notes: combinedNotes || null,
                             items: {
                                 create: processedItems
                             }

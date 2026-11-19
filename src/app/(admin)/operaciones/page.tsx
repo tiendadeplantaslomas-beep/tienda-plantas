@@ -19,7 +19,7 @@ interface Order {
     paidAmount: number;
     pendingBalance: number;
     paymentStatus: string;
-    status: 'REGISTRADO' | 'ENTREGADO' | 'RECLAMO' | 'ATENDIDO'; // <-- Añadido 'ATENDIDO' aquí
+    status: 'REGISTRADO' | 'ENTREGADO' | 'RECLAMO' | 'ATENDIDO';
     isPaid: boolean;
     paymentMethod: string;
     paymentReference?: string;
@@ -108,12 +108,9 @@ function OperacionesContent() {
                 const data = await res.json();
                 setOrders(data);
 
-                // Si viene un ID específico o un claimId, ajustamos la solapa automáticamente 
-                // PERO respetamos la fecha que ya vino por parámetro en la URL si existe
                 if ((orderIdParam || claimIdParam) && data.length > 0) {
                     const foundOrder = data[0];
 
-                    // Solo asignamos la fecha de la orden si NO vino un dateParam en la URL
                     if (!dateParam) {
                         const orderDate = foundOrder.createdAt.split('T')[0];
                         setDateFrom(orderDate);
@@ -255,9 +252,7 @@ function OperacionesContent() {
                     </p>
                 </div>
 
-                {/* CONTENEDOR DE BOTÓN VOLVER (CONDICIONAL) Y FILTROS DE FECHA */}
                 <div className="flex items-center gap-2 flex-wrap">
-                    {/* Botón Volver visible solo si llega desde la página de clientes */}
                     {isFromClient && (
                         <button
                             onClick={() => router.back()}
@@ -354,7 +349,6 @@ function OperacionesContent() {
                             No hay registros en esta sección para el rango de fechas seleccionado.
                         </div>
                     ) : activeTab === 'FINALIZADAS' ? (
-                        /* VISTA TABULAR PARA FINALIZADAS */
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs border-collapse">
                                 <thead className="bg-stone-50 text-[10px] uppercase text-stone-500 font-bold border-b border-stone-200 sticky top-0">
@@ -418,8 +412,69 @@ function OperacionesContent() {
                                 </tbody>
                             </table>
                         </div>
+                    ) : activeTab === 'RECLAMOS' ? (
+                        /* VISTA DE MINI-TARJETAS PARA RECLAMOS CON WHATSAPP DIRECTO */
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            {paginatedItems.map(ord => (
+                                <div key={ord.id} className="p-3 bg-stone-50/90 border border-stone-200 rounded-xl space-y-2 text-xs flex flex-col justify-between shadow-2xs">
+                                    <div className="space-y-1.5">
+                                        <div className="flex justify-between items-start font-bold text-stone-900 border-b border-stone-200 pb-1">
+                                            <div>
+                                                <span className="font-mono text-emerald-700 text-[10px]">#{ord.id.slice(-6).toUpperCase()}</span>
+                                                <h4 className="text-xs uppercase truncate max-w-[160px] font-extrabold">{ord.client}</h4>
+                                            </div>
+                                            <span className="font-mono font-black text-xs text-stone-900">$ {ord.total.toLocaleString()}</span>
+                                        </div>
+
+                                        <div className="bg-white p-2 rounded-lg border border-stone-200 space-y-1 text-[10px]">
+                                            <div className="flex justify-between text-stone-600">
+                                                <span>Contacto:</span>
+                                                <span className="font-mono font-bold text-stone-800">{ord.clientEmail || 'No registrado'}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-[10px]">
+                                            <span className="text-stone-500">Canal: <strong className="text-stone-700">{ord.channel}</strong></span>
+                                            <span className="px-1.5 py-0.2 rounded font-bold uppercase text-[9px] bg-indigo-100 text-indigo-800">
+                                                {ord.status}
+                                            </span>
+                                        </div>
+
+                                        {ord.notes && (
+                                            <div className="p-1.5 bg-indigo-50 border border-indigo-200 rounded text-[10px] font-medium text-indigo-900">
+                                                💬 {ord.notes}
+                                            </div>
+                                        )}
+
+                                        <div className="text-[9px] text-stone-500 truncate">
+                                            <strong>Ítems afectados:</strong> {ord.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-2 border-t border-stone-200 flex flex-col gap-1.5">
+                                        {/* BOTÓN DE WHATSAPP DIRECTO CON NÚMERO */}
+                                        <a
+                                            href={`https://wa.me/${ord.clientPhone ? ord.clientPhone.replace(/\D/g, '') : ''}?text=${encodeURIComponent(`Hola ${ord.client}, nos comunicamos de Tienda de Plantas en relación al reclamo de tu pedido #${ord.id.slice(-6).toUpperCase()}. Queremos coordinar la solución a la brevedad.`)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-[10px] uppercase transition cursor-pointer text-center shadow-2xs flex items-center justify-center gap-1.5"
+                                        >
+                                            <span>💬</span>
+                                            <span>Contactar por WhatsApp</span>
+                                        </a>
+
+                                        <button
+                                            onClick={() => setResolveModalOrder(ord)}
+                                            className="w-full py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-[9px] uppercase transition cursor-pointer text-center shadow-2xs"
+                                        >
+                                            ✓ Resolver Reclamo
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     ) : (
-                        /* VISTA DE MINI-TARJETAS COMPACTAS PARA PENDIENTES, COBRAR Y RECLAMOS */
+                        /* VISTA DE MINI-TARJETAS PARA PENDIENTES Y COBRAR */
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                             {paginatedItems.map(ord => (
                                 <div key={ord.id} className="p-3 bg-stone-50/90 border border-stone-200 rounded-xl space-y-1.5 text-xs flex flex-col justify-between shadow-2xs">
@@ -465,54 +520,42 @@ function OperacionesContent() {
                                         </div>
                                     </div>
 
-                                    {/* ACCIONES RÁPIDAS EN MINI-TARJETA */}
                                     <div className="pt-1.5 border-t border-stone-200 flex items-center gap-1">
-                                        {activeTab === 'RECLAMOS' ? (
+                                        {ord.status !== 'ENTREGADO' && (
                                             <button
-                                                onClick={() => setResolveModalOrder(ord)}
-                                                className="w-full py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-[9px] uppercase transition cursor-pointer text-center shadow-2xs"
+                                                onClick={async () => {
+                                                    await fetch('/api/ventas', {
+                                                        method: 'PATCH',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ id: ord.id, status: 'ENTREGADO' }),
+                                                    });
+                                                    loadOrders();
+                                                }}
+                                                className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-[9px] uppercase transition cursor-pointer text-center shadow-2xs"
                                             >
-                                                ✓ Resolver Reclamo
+                                                ✓ Entregado
                                             </button>
-                                        ) : (
-                                            <>
-                                                {ord.status !== 'ENTREGADO' && (
-                                                    <button
-                                                        onClick={async () => {
-                                                            await fetch('/api/ventas', {
-                                                                method: 'PATCH',
-                                                                headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({ id: ord.id, status: 'ENTREGADO' }),
-                                                            });
-                                                            loadOrders();
-                                                        }}
-                                                        className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-[9px] uppercase transition cursor-pointer text-center shadow-2xs"
-                                                    >
-                                                        ✓ Entregado
-                                                    </button>
-                                                )}
-
-                                                {ord.pendingBalance > 0 && (
-                                                    <button
-                                                        onClick={() => {
-                                                            setMontoAplicarInput(ord.pendingBalance);
-                                                            setPaymentModalOrder(ord);
-                                                        }}
-                                                        className="flex-1 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[9px] uppercase transition cursor-pointer text-center shadow-2xs"
-                                                    >
-                                                        💳 Cobrar
-                                                    </button>
-                                                )}
-
-                                                <button
-                                                    onClick={() => setClaimModalOrder(ord)}
-                                                    className="py-1 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded font-bold text-[9px] transition cursor-pointer"
-                                                    title="Marcar como Reclamo"
-                                                >
-                                                    ⚠️
-                                                </button>
-                                            </>
                                         )}
+
+                                        {ord.pendingBalance > 0 && (
+                                            <button
+                                                onClick={() => {
+                                                    setMontoAplicarInput(ord.pendingBalance);
+                                                    setPaymentModalOrder(ord);
+                                                }}
+                                                className="flex-1 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[9px] uppercase transition cursor-pointer text-center shadow-2xs"
+                                            >
+                                                💳 Cobrar
+                                            </button>
+                                        )}
+
+                                        <button
+                                            onClick={() => setClaimModalOrder(ord)}
+                                            className="py-1 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded font-bold text-[9px] transition cursor-pointer"
+                                            title="Marcar como Reclamo"
+                                        >
+                                            ⚠️
+                                        </button>
                                     </div>
                                 </div>
                             ))}
@@ -520,7 +563,6 @@ function OperacionesContent() {
                     )}
                 </div>
 
-                {/* PAGINADOR INFERIOR */}
                 {totalPages > 1 && (
                     <div className="p-2.5 border-t border-stone-100 bg-stone-50/50 flex justify-between items-center shrink-0">
                         <button
@@ -544,7 +586,7 @@ function OperacionesContent() {
                 )}
             </div>
 
-            {/* MODAL DE REPORTE DE RECLAMO (CREAR) */}
+            {/* MODAL DE REPORTE DE RECLAMO */}
             {claimModalOrder && (
                 <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3">
                     <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4">

@@ -78,9 +78,13 @@ export default function AdminResenasPage() {
 
             if (res.ok) {
                 setMensajeFeedback(`¡Respuesta guardada con éxito!`);
+
+                // Recargamos las reseñas desde la API para actualizar toda la grilla y contadores
                 await cargarResenas();
-                const actualizada = { ...resenaSeleccionada, respuesta: textoRespuesta };
-                setResenaSeleccionada(actualizada);
+
+                // Actualizamos la reseña seleccionada manteniendo los datos frescos
+                setResenaSeleccionada(prev => prev ? { ...prev, respuesta: textoRespuesta } : null);
+
                 setTimeout(() => setMensajeFeedback(''), 3000);
             } else {
                 alert('No se pudo guardar la respuesta.');

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { getCurrentUserProfile } from '@/actions/client-actions';
 import {
     Package,
     Sprout,
@@ -21,23 +22,40 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage() {
-    const { data: session, status } = useSession();
+    const router = useRouter();
 
-    // Estados dinámicos para métricas y estado operativo
     const [cajaPendiente, setCajaPendiente] = useState(false);
     const [facturasCount, setFacturasCount] = useState(0);
     const [pedidosCount, setPedidosCount] = useState(0);
     const [loadingStats, setLoadingStats] = useState(true);
 
-    // Estados dinámicos para el perfil del usuario activo
-    const [profileName, setProfileName] = useState('Daniel Urraca');
-    const [profileEmail, setProfileEmail] = useState('admin@tiendadeplantas.com');
+    const [profileName, setProfileName] = useState('Personal Interno');
+    const [profileEmail, setProfileEmail] = useState('');
+    const [profileRole, setProfileRole] = useState('CAJERO');
     const [profileImage, setProfileImage] = useState('');
-
-    const userRole = (session?.user as any)?.role || 'ADMIN';
+    const [loadingUser, setLoadingUser] = useState(true);
 
     useEffect(() => {
-        // 1. Cargar estadísticas reales de caja, facturas y pedidos desde TiDB
+        async function fetchUserProfile() {
+            try {
+                const user = await getCurrentUserProfile();
+                if (user) {
+                    if (user.name) setProfileName(user.name);
+                    if (user.email) setProfileEmail(user.email);
+                    if (user.role) setProfileRole(user.role.toUpperCase());
+                    if (user.image) setProfileImage(user.image);
+                } else {
+                    router.push('/login');
+                }
+            } catch (error) {
+                console.error('Error al sincronizar perfil en dashboard:', error);
+            } finally {
+                setLoadingUser(false);
+            }
+        }
+
+        fetchUserProfile();
+
         async function fetchDashboardStats() {
             try {
                 const res = await fetch('/api/admin/dashboard-stats');
@@ -56,24 +74,8 @@ export default function DashboardPage() {
             }
         }
 
-        // 2. Cargar datos actualizados del perfil del usuario activo
-        async function fetchProfileData() {
-            try {
-                const res = await fetch('/api/admin/perfil');
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.nombre) setProfileName(data.nombre);
-                    if (data.email) setProfileEmail(data.email);
-                    if (data.imagenUrl !== undefined) setProfileImage(data.imagenUrl);
-                }
-            } catch (error) {
-                console.error('Error al cargar perfil en el dashboard:', error);
-            }
-        }
-
         fetchDashboardStats();
-        fetchProfileData();
-    }, []);
+    }, [router]);
 
     const operationalModules = [
         {
@@ -82,7 +84,7 @@ export default function DashboardPage() {
             href: '/productos',
             icon: Package,
             category: 'Inventario',
-            allowedRoles: ['ADMIN', 'CAJERO', 'DEPOSITO'],
+            allowedRoles: ['ADMIN', 'CAJERO', 'DEPOSITO', 'OPERADOR'],
             pastelBg: 'bg-emerald-50/90 hover:bg-emerald-100/80 border-emerald-200 text-emerald-900',
             badgeColor: 'text-emerald-700',
             iconColor: 'text-emerald-600'
@@ -93,7 +95,7 @@ export default function DashboardPage() {
             href: '/vivero',
             icon: Sprout,
             category: 'Botánico',
-            allowedRoles: ['ADMIN', 'CAJERO', 'DEPOSITO'],
+            allowedRoles: ['ADMIN', 'CAJERO', 'DEPOSITO', 'OPERADOR'],
             pastelBg: 'bg-lime-50/90 hover:bg-lime-100/80 border-lime-200 text-lime-900',
             badgeColor: 'text-lime-700',
             iconColor: 'text-lime-600'
@@ -104,7 +106,7 @@ export default function DashboardPage() {
             href: '/ventas',
             icon: ShoppingCart,
             category: 'Mostrador',
-            allowedRoles: ['ADMIN', 'CAJERO'],
+            allowedRoles: ['ADMIN', 'CAJERO', 'DEPOSITO'],
             pastelBg: 'bg-sky-50/90 hover:bg-sky-100/80 border-sky-200 text-sky-900',
             badgeColor: 'text-sky-700',
             iconColor: 'text-sky-600'
@@ -115,7 +117,7 @@ export default function DashboardPage() {
             href: '/caja',
             icon: DollarSign,
             category: 'Tesorería',
-            allowedRoles: ['ADMIN', 'CAJERO'],
+            allowedRoles: ['ADMIN', 'CAJERO', 'DEPOSITO'],
             pastelBg: 'bg-amber-50/90 hover:bg-amber-100/80 border-amber-200 text-amber-900',
             badgeColor: 'text-amber-700',
             iconColor: 'text-amber-600'
@@ -148,7 +150,7 @@ export default function DashboardPage() {
             href: '/portada',
             icon: ImageIcon,
             category: 'Tienda Web',
-            allowedRoles: ['ADMIN'],
+            allowedRoles: ['ADMIN', 'OPERADOR'],
             pastelBg: 'bg-pink-50/90 hover:bg-pink-100/80 border-pink-200 text-pink-900',
             badgeColor: 'text-pink-700',
             iconColor: 'text-pink-600'
@@ -159,7 +161,7 @@ export default function DashboardPage() {
             href: '/promociones',
             icon: Percent,
             category: 'Comercial',
-            allowedRoles: ['ADMIN', 'CAJERO'],
+            allowedRoles: ['ADMIN', 'CAJERO', 'OPERADOR'],
             pastelBg: 'bg-teal-50/90 hover:bg-teal-100/80 border-teal-200 text-teal-900',
             badgeColor: 'text-teal-700',
             iconColor: 'text-teal-600'
@@ -170,7 +172,7 @@ export default function DashboardPage() {
             href: '/resenas',
             icon: MessageSquare,
             category: 'Comunidad',
-            allowedRoles: ['ADMIN'],
+            allowedRoles: ['ADMIN', 'OPERADOR'],
             pastelBg: 'bg-rose-50/90 hover:bg-rose-100/80 border-rose-200 text-rose-900',
             badgeColor: 'text-rose-700',
             iconColor: 'text-rose-600'
@@ -203,22 +205,22 @@ export default function DashboardPage() {
             href: '/operaciones',
             icon: Truck,
             category: 'Logística & Caja',
-            allowedRoles: ['ADMIN', 'CAJERO'],
+            allowedRoles: ['ADMIN', 'CAJERO', 'OPERADOR'],
             pastelBg: 'bg-emerald-50/90 hover:bg-emerald-100/80 border-emerald-200 text-emerald-900',
             badgeColor: 'text-emerald-700',
             iconColor: 'text-emerald-600'
         },
-
-
     ];
 
-    if (status === 'loading') {
+    if (loadingUser) {
         return (
             <div className="h-full bg-stone-100 flex items-center justify-center text-xs text-stone-500 font-medium">
                 Cargando panel de control...
             </div>
         );
     }
+
+    const iniciales = profileName ? profileName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'US';
 
     return (
         <div className="h-full overflow-hidden p-3.5 md:p-4 space-y-3 font-sans text-stone-800 bg-stone-100 rounded-3xl border border-stone-200 shadow-inner flex flex-col justify-between">
@@ -229,14 +231,14 @@ export default function DashboardPage() {
                 <div className="lg:col-span-8 flex flex-col">
                     <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-2xs flex flex-col justify-between space-y-2.5">
                         <h2 className="text-[11px] font-extrabold text-stone-800 uppercase tracking-wider border-b border-stone-100 pb-2 flex items-center justify-between">
-                            <span>Módulos del Sistema y Permisos (Rol: <strong className="text-emerald-700">{userRole}</strong>)</span>
+                            <span>Módulos del Sistema y Permisos (Rol: <strong className="text-emerald-700">{profileRole}</strong>)</span>
                             <span className="text-[10px] font-normal text-stone-400">Versión 2.5.0 RBAC</span>
                         </h2>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                             {operationalModules.map((mod, index) => {
                                 const IconComponent = mod.icon;
-                                const hasAccess = userRole === 'ADMIN' || mod.allowedRoles.includes(userRole);
+                                const hasAccess = profileRole === 'ADMIN' || mod.allowedRoles.includes(profileRole);
 
                                 return hasAccess ? (
                                     <Link
@@ -283,25 +285,19 @@ export default function DashboardPage() {
                     <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-2xs space-y-2.5">
                         <div className="flex items-center justify-between border-b border-stone-100 pb-2">
                             <span className="text-[10px] font-extrabold text-stone-400 uppercase tracking-wider">Usuario Activo</span>
-                            <button
-                                onClick={() => signOut({ callbackUrl: '/login' })}
-                                className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer bg-transparent border-none p-0"
-                            >
-                                Cerrar Sesión
-                            </button>
                         </div>
 
                         <Link href="/perfil" className="flex items-center gap-3 p-1.5 -mx-1.5 hover:bg-stone-50 rounded-xl transition group">
-                            <div className="w-9 h-9 bg-emerald-700 text-white rounded-xl flex items-center justify-center font-bold text-xs shadow-2xs shrink-0 overflow-hidden">
+                            <div className="w-9 h-9 bg-emerald-700 text-white rounded-xl flex items-center justify-center font-bold text-xs shadow-2xs shrink-0 overflow-hidden border border-stone-200">
                                 {profileImage ? (
                                     <img src={profileImage} alt="Avatar" className="w-full h-full object-cover" />
                                 ) : (
-                                    profileName.substring(0, 2).toUpperCase()
+                                    <span>{iniciales}</span>
                                 )}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-xs font-bold text-stone-900 group-hover:text-emerald-700 transition truncate">{profileName}</h3>
-                                <p className="text-[10px] text-stone-500 truncate">Rol: <strong className="text-emerald-600">{userRole}</strong> — <span className="underline">Editar Perfil</span></p>
+                                <p className="text-[10px] text-stone-500 truncate">Rol: <strong className="text-emerald-600">{profileRole}</strong> — <span className="underline">Editar Perfil</span></p>
                             </div>
                         </Link>
 
@@ -312,12 +308,12 @@ export default function DashboardPage() {
                             </div>
                             <div className="p-2 bg-stone-50 rounded-xl border border-stone-100">
                                 <span className="block text-[8px] text-stone-400 uppercase">Cuenta</span>
-                                <span className="font-bold text-stone-700 truncate block">{profileEmail}</span>
+                                <span className="font-bold text-stone-700 truncate block">{profileEmail || 's/d'}</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Actividad y Estado de Caja (Dinámico y Conectado a TiDB) */}
+                    {/* Actividad y Estado de Caja */}
                     <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-2xs space-y-2.5">
                         <div className="flex items-center justify-between border-b border-stone-100 pb-2">
                             <span className="text-[10px] font-extrabold text-stone-400 uppercase tracking-wider">Actividad y Estado de Caja</span>

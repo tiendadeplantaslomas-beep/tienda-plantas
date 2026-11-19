@@ -17,7 +17,8 @@ import {
     saveProduct,
     deleteProduct,
     importProductsBatch,
-    adjustStock
+    adjustStock,
+    getSuggestedProductPrice
 } from '@/actions/product-actions';
 
 function SupplierInlineForm({
@@ -160,7 +161,7 @@ export default function ProductosPage() {
     const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
     const [customMargin, setCustomMargin] = useState(false);
-    const [isFormUnlocked, setIsFormUnlocked] = useState(false); // 👈 Controla si el formulario está desbloqueado
+    const [isFormUnlocked, setIsFormUnlocked] = useState(false);
 
     const [categories, setCategories] = useState<Category[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -186,7 +187,6 @@ export default function ProductosPage() {
     const [catPanelError, setCatPanelError] = useState<string | null>(null);
     const [supPanelError, setSupPanelError] = useState<string | null>(null);
 
-    // Estados de edición de categorías en el panel desplegable
     const [editingCatId, setEditingCatId] = useState<string | null>(null);
     const [editCatName, setEditCatName] = useState('');
     const [editCatMargin, setEditCatMargin] = useState<number | ''>(100);
@@ -211,6 +211,11 @@ export default function ProductosPage() {
     const [minStock, setMinStock] = useState<number | ''>(2);
     const [imageUrl, setImageUrl] = useState('');
     const [imageError, setImageError] = useState<string | null>(null);
+
+    // Precio sugerido (3 meses c/ gastos) + tilde opcional (no altera carga manual por defecto)
+    const [suggestedPrice, setSuggestedPrice] = useState<number | null>(null);
+    const [suggestedSourceLabel, setSuggestedSourceLabel] = useState<string>('');
+    const [useSuggestedPrice, setUseSuggestedPrice] = useState<boolean>(false);
 
     const [destacado, setDestacado] = useState(false);
     const [color, setColor] = useState('');
@@ -287,11 +292,14 @@ export default function ProductosPage() {
         setMinStock(2);
         setImageUrl('');
         setImageError(null);
+        setSuggestedPrice(null);
+        setSuggestedSourceLabel('');
+        setUseSuggestedPrice(false);
         setDestacado(false);
         setColor('');
         setTamano('');
         setStockWeb(0);
-        setIsFormUnlocked(false); // 👈 Bloquea / grisá el formulario de nuevo
+        setIsFormUnlocked(false);
     };
 
     const loadData = async () => {
@@ -324,9 +332,18 @@ export default function ProductosPage() {
             return;
         }
         const marginVal = cMargin ?? 100;
-        let subtotalNoTax = marginVal >= 100 ? totalBaseCost * (1 + marginVal / 100) : totalBaseCost / (1 - (marginVal / 100));
+        const subtotalNoTax = marginVal >= 100 ? totalBaseCost * (1 + marginVal / 100) : totalBaseCost / (1 - (marginVal / 100));
         const finalWithTax = subtotalNoTax * (1 + (cTax || 0) / 100);
         setPriceFinal(Math.round(finalWithTax));
+    };
+
+    const handleToggleSuggestedPrice = (checked: boolean) => {
+        setUseSuggestedPrice(checked);
+        if (checked && suggestedPrice !== null && suggestedPrice > 0) {
+            setPriceFinal(suggestedPrice);
+        } else if (!checked) {
+            computePrices(Number(cost), Number(otherCosts), Number(margin), taxRate);
+        }
     };
 
     const handleSaveCategoryStandalone = async () => {
@@ -383,7 +400,9 @@ export default function ProductosPage() {
 
             if (!customMargin) {
                 setMargin(cat.defaultMargin ?? 100);
-                computePrices(Number(cost), Number(otherCosts), cat.defaultMargin ?? 100, taxRate);
+                if (!useSuggestedPrice) {
+                    computePrices(Number(cost), Number(otherCosts), cat.defaultMargin ?? 100, taxRate);
+                }
             }
 
             const nextCode = await generateNextProductCode(cat.id);
@@ -393,7 +412,7 @@ export default function ProductosPage() {
         }
     };
 
-    const handleEditProduct = (prod: any) => {
+    const handleEditProduct = async (prod: any) => {
         setId(prod.id);
         setCode(prod.code);
         setName(prod.name);
@@ -411,11 +430,16 @@ export default function ProductosPage() {
         setMinStock(prod.minStock);
         setImageUrl(prod.imageUrl || '');
         setImageError(null);
+        setUseSuggestedPrice(false);
         setDestacado(prod.destacado || false);
         setColor(prod.color || '');
         setTamano(prod.tamano || '');
         setStockWeb(prod.stockWeb !== undefined ? prod.stockWeb : prod.stock);
-        setIsFormUnlocked(true); // 👈 Desbloquea el formulario al editar un producto
+        setIsFormUnlocked(true);
+
+        const sug = await getSuggestedProductPrice(prod.id);
+        setSuggestedPrice(sug.suggestedPrice || null);
+        setSuggestedSourceLabel(sug.sourceLabel || '');
 
         setTimeout(() => {
             window.scrollTo({ top: 120, behavior: 'smooth' });
@@ -486,7 +510,7 @@ export default function ProductosPage() {
             setMessage({ type: 'error', text: 'No hay productos para exportar.' });
             return;
         }
-        const headers = ['Codigo', 'Nombre', 'Categoria', 'Proveedor', 'CostoBase', 'FleteOtros', 'Margen', 'IVA', 'PrecioFinal', 'Stock', 'StockMinimo', 'Destacado', 'ImagenUrl'];
+        const headers = ['Codigo', 'Nombre', 'Categoria', 'Proveedor', 'CostoBase', 'FleteOtros', 'Margen', 'IVA', 'PrecioUnitario', 'Stock', 'StockMinimo', 'Destacado', 'ImagenUrl'];
         const rows = products.map(p => [
             `"${p.code || ''}"`, `"${p.name || ''}"`, `"${p.category?.name || ''}"`, `"${p.supplier?.name || ''}"`,
             p.cost || 0, p.otherCosts || 0, p.margin || 0, p.taxRate || 0, p.price || 0, p.stock || 0, p.minStock || 0,
@@ -554,7 +578,7 @@ export default function ProductosPage() {
                             <span>📦</span> Catálogo de Productos & Gestión Comercial
                         </h1>
                         <p className="text-[9px] text-slate-500 font-medium">
-                            Control de inventario, costos y márgenes. &bull; {fechaActual}
+                            Control de inventario, costos unitarios y márgenes. &bull; {fechaActual}
                         </p>
                     </div>
 
@@ -600,7 +624,6 @@ export default function ProductosPage() {
                             {showSupplierPanel ? '✕ Proveedor' : '🚚 Proveedor'}
                         </button>
 
-                        {/* BOTÓN NUEVO REGISTRO: Desbloquea el formulario */}
                         <button
                             type="button"
                             onClick={() => {
@@ -660,7 +683,7 @@ export default function ProductosPage() {
                     </div>
                 )}
 
-                {/* PANEL DE CATEGORÍAS CON LISTADO Y EDICIÓN INTEGRADA */}
+                {/* PANEL DE CATEGORÍAS */}
                 {showCategoryPanel && (
                     <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg border border-slate-700 animate-in fade-in space-y-3 shrink-0">
                         <div className="flex justify-between items-center border-b border-slate-700 pb-1.5">
@@ -672,7 +695,6 @@ export default function ProductosPage() {
 
                         {catPanelError && <p className="text-[10px] text-rose-400 font-bold bg-rose-950/50 p-1.5 rounded">⚠️ {catPanelError}</p>}
 
-                        {/* FORMULARIO DE ALTA */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center bg-slate-800/60 p-2 rounded-lg border border-slate-700">
                             <input
                                 type="text"
@@ -698,7 +720,6 @@ export default function ProductosPage() {
                             </button>
                         </div>
 
-                        {/* LISTADO DE CATEGORÍAS EXISTENTES CON EDICIÓN */}
                         <div className="space-y-1">
                             <p className="text-[9px] font-bold text-slate-400 uppercase">Categorías Registradas ({categories.length}):</p>
                             <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
@@ -706,7 +727,6 @@ export default function ProductosPage() {
                                     categories.map((cat) => (
                                         <div key={cat.id} className="bg-slate-800/80 p-2 rounded border border-slate-700/60 text-[10px] space-y-1.5">
                                             {editingCatId === cat.id ? (
-                                                /* MODO EDICIÓN ACTIVO */
                                                 <div className="flex gap-1.5 items-center">
                                                     <input
                                                         type="text"
@@ -759,7 +779,6 @@ export default function ProductosPage() {
                                                     </button>
                                                 </div>
                                             ) : (
-                                                /* MODO VISTA NORMAL */
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-extrabold text-white">{cat.name}</span>
@@ -780,24 +799,6 @@ export default function ProductosPage() {
                                                             title="Editar categoría"
                                                         >
                                                             ✏️ Editar
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={async () => {
-                                                                if (confirm(`¿Estás seguro de eliminar la categoría "${cat.name}"?`)) {
-                                                                    const res = await deleteCategory(cat.id);
-                                                                    if (res.error) {
-                                                                        setCatPanelError(res.error);
-                                                                    } else {
-                                                                        setMessage({ type: 'success', text: `Categoría "${cat.name}" eliminada correctamente.` });
-                                                                        setCategories(prev => prev.filter(c => c.id !== cat.id));
-                                                                    }
-                                                                }
-                                                            }}
-                                                            className="text-rose-400 hover:text-rose-200 font-bold px-1.5 py-0.5 rounded bg-rose-950/40 hover:bg-rose-900/60 transition-colors cursor-pointer"
-                                                            title="Eliminar categoría"
-                                                        >
-                                                            🗑️ Eliminar
                                                         </button>
                                                     </div>
                                                 </div>
@@ -831,7 +832,7 @@ export default function ProductosPage() {
                     </div>
                 )}
 
-                {/* FORMULARIO FIJO DE ALTA Y EDICIÓN DE PRODUCTO (Visible pero bloqueado/grisado si isFormUnlocked es false) */}
+                {/* FORMULARIO FIJO DE ALTA Y EDICIÓN DE PRODUCTO */}
                 <div
                     ref={formRef}
                     className={`bg-white p-4 rounded-xl shadow-sm border border-stone-200 space-y-2.5 transition-all ${!isFormUnlocked ? 'opacity-50 bg-slate-50 pointer-events-none select-none' : ''}`}
@@ -900,7 +901,6 @@ export default function ProductosPage() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            {/* CATEGORÍA AUTOCOMPLETE */}
                             <div className="relative" ref={catRef}>
                                 <div className="flex justify-between items-center mb-0.5">
                                     <label className="block text-[8px] font-bold text-slate-600 uppercase">Categoría *</label>
@@ -922,13 +922,11 @@ export default function ProductosPage() {
                                 )}
                             </div>
 
-                            {/* CÓDIGO PRODUCTO */}
                             <div>
                                 <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Código Identificador</label>
                                 <input type="text" readOnly disabled={!isFormUnlocked} placeholder="Autogenerado..." value={code} className="w-full bg-slate-100 border border-slate-200 rounded px-2 py-1 text-[10px] font-mono font-bold text-slate-600 cursor-not-allowed" />
                             </div>
 
-                            {/* NOMBRE PRODUCTO */}
                             <div>
                                 <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Nombre del Producto *</label>
                                 <input type="text" disabled={!isFormUnlocked} required placeholder="EJ. FICUS LYRATA 10L" value={name} onChange={(e) => setName(e.target.value.toUpperCase())} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold uppercase text-slate-800 focus:bg-white" />
@@ -936,7 +934,6 @@ export default function ProductosPage() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            {/* PROVEEDOR AUTOCOMPLETE */}
                             <div className="relative" ref={supRef}>
                                 <div className="flex justify-between items-center mb-0.5">
                                     <label className="block text-[8px] font-bold text-slate-600 uppercase">Proveedor Sugerido</label>
@@ -957,19 +954,45 @@ export default function ProductosPage() {
                                 )}
                             </div>
 
-                            {/* COSTOS */}
                             <div className="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Costo Base ($)</label>
-                                    <input type="number" disabled={!isFormUnlocked} step="any" placeholder="0" value={cost} onChange={(e) => { const v = e.target.value === '' ? '' : parseFloat(e.target.value); setCost(v); computePrices(Number(v), Number(otherCosts), Number(margin), taxRate); }} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800" />
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Costo Base Unit. ($)</label>
+                                    <input
+                                        type="number"
+                                        disabled={!isFormUnlocked}
+                                        step="any"
+                                        placeholder="0"
+                                        value={cost}
+                                        onChange={(e) => {
+                                            const v = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                            setCost(v);
+                                            if (!useSuggestedPrice) {
+                                                computePrices(Number(v), Number(otherCosts), Number(margin), taxRate);
+                                            }
+                                        }}
+                                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800"
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Flete/Otros ($)</label>
-                                    <input type="number" disabled={!isFormUnlocked} step="any" placeholder="0" value={otherCosts} onChange={(e) => { const v = e.target.value === '' ? '' : parseFloat(e.target.value); setOtherCosts(v); computePrices(Number(cost), Number(v), Number(margin), taxRate); }} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800" />
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Flete/Otros Unit. ($)</label>
+                                    <input
+                                        type="number"
+                                        disabled={!isFormUnlocked}
+                                        step="any"
+                                        placeholder="0"
+                                        value={otherCosts}
+                                        onChange={(e) => {
+                                            const v = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                            setOtherCosts(v);
+                                            if (!useSuggestedPrice) {
+                                                computePrices(Number(cost), Number(v), Number(margin), taxRate);
+                                            }
+                                        }}
+                                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-semibold text-slate-800"
+                                    />
                                 </div>
                             </div>
 
-                            {/* MARGEN E IVA (CON CHECKBOX DE MANUAL) */}
                             <div className="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <div className="flex justify-between items-center mb-0.5">
@@ -998,14 +1021,27 @@ export default function ProductosPage() {
                                             const v = e.target.value === '' ? '' : parseFloat(e.target.value);
                                             setMargin(v);
                                             setCustomMargin(true);
-                                            computePrices(Number(cost), Number(otherCosts), Number(v), taxRate);
+                                            if (!useSuggestedPrice) {
+                                                computePrices(Number(cost), Number(otherCosts), Number(v), taxRate);
+                                            }
                                         }}
                                         className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold text-slate-800"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Tasa IVA (%)</label>
-                                    <select disabled={!isFormUnlocked} value={taxRate} onChange={(e) => { const v = parseFloat(e.target.value); setTaxRate(v); computePrices(Number(cost), Number(otherCosts), Number(margin), v); }} className="w-full bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-[10px] font-semibold text-slate-800">
+                                    <select
+                                        disabled={!isFormUnlocked}
+                                        value={taxRate}
+                                        onChange={(e) => {
+                                            const v = parseFloat(e.target.value);
+                                            setTaxRate(v);
+                                            if (!useSuggestedPrice) {
+                                                computePrices(Number(cost), Number(otherCosts), Number(margin), v);
+                                            }
+                                        }}
+                                        className="w-full bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-[10px] font-semibold text-slate-800"
+                                    >
                                         <option value={21}>21%</option>
                                         <option value={10.5}>10.5%</option>
                                         <option value={0}>0%</option>
@@ -1014,12 +1050,36 @@ export default function ProductosPage() {
                             </div>
                         </div>
 
-                        {/* STOCKS Y PRECIO FINAL */}
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-2 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100 items-center">
+                        {/* STOCKS, PRECIO UNITARIO Y PRECIO SUGERIDO OPCIONAL */}
+                        <div className="grid grid-cols-1 md:grid-cols-6 gap-2 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100 items-center">
                             <div className="flex flex-col justify-center">
-                                <label className="block text-[8px] font-bold text-emerald-900 uppercase">Precio Final (Con IVA)</label>
+                                <label className="block text-[8px] font-bold text-emerald-900 uppercase">Precio Unit. Final (Con IVA)</label>
                                 <div className="text-sm font-black text-emerald-700">${priceFinal.toLocaleString('es-AR')}</div>
                             </div>
+
+                            <div className="bg-white/90 p-1.5 rounded border border-emerald-200/80">
+                                <div className="flex items-center justify-between gap-1">
+                                    <label className="block text-[8px] font-bold text-slate-600 uppercase">Sugerido (3m c/ gast.)</label>
+                                    <input
+                                        type="checkbox"
+                                        disabled={!isFormUnlocked || !suggestedPrice}
+                                        id="applySuggestedPriceCheck"
+                                        checked={useSuggestedPrice}
+                                        onChange={(e) => handleToggleSuggestedPrice(e.target.checked)}
+                                        className="w-3 h-3 text-emerald-600 rounded cursor-pointer"
+                                        title="Tildar para aplicar el precio sugerido histórico de los últimos 3 meses con gastos"
+                                    />
+                                </div>
+                                <div className="text-[11px] font-extrabold text-slate-800 font-mono">
+                                    {suggestedPrice ? `$${suggestedPrice.toLocaleString('es-AR')}` : '—'}
+                                </div>
+                                {suggestedSourceLabel && (
+                                    <p className="text-[7px] text-slate-400 truncate" title={suggestedSourceLabel}>
+                                        {suggestedSourceLabel}
+                                    </p>
+                                )}
+                            </div>
+
                             <div>
                                 <label className="block text-[8px] font-bold text-slate-600 uppercase mb-0.5">Stock Físico</label>
                                 <input type="number" disabled={!isFormUnlocked} placeholder="0" value={stock} onChange={(e) => setStock(e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[10px] font-bold text-slate-800" />
@@ -1038,7 +1098,6 @@ export default function ProductosPage() {
                             </div>
                         </div>
 
-                        {/* VARIANTES WEB EN UNA SOLA LÍNEA */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-stone-100 p-2 rounded-lg border border-stone-200">
                             <div>
                                 <label className="block text-[8px] font-bold text-stone-700 uppercase mb-0.5">🎨 Color (Variante Web)</label>
@@ -1062,7 +1121,6 @@ export default function ProductosPage() {
                     </form>
                 </div>
 
-                {/* MODAL DE LISTADO COMPLETO */}
                 <ModalListadoProductos
                     isOpen={showModalListado}
                     onClose={() => setShowModalListado(false)}
@@ -1070,16 +1128,15 @@ export default function ProductosPage() {
                     loading={loading}
                     onEdit={(prod) => handleEditProduct(prod)}
                     onQuickStock={(prod) => handleOpenStockModal(prod)}
-                    onDelete={async (id, name) => {
-                        if (confirm(`¿Eliminar producto "${name}"?`)) {
-                            const res = await deleteProduct(id);
+                    onDelete={async (prodId, prodName) => {
+                        if (confirm(`¿Eliminar producto "${prodName}"?`)) {
+                            const res = await deleteProduct(prodId);
                             if (res.error) setMessage({ type: 'error', text: res.error });
                             else { setMessage({ type: 'success', text: 'Producto eliminado.' }); loadData(); }
                         }
                     }}
                 />
 
-                {/* MODALES DE STOCK E IMPORTACIÓN */}
                 {showStockModal && selectedProductForStock && (
                     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3">
                         <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 space-y-3 animate-in zoom-in-95">
@@ -1094,7 +1151,7 @@ export default function ProductosPage() {
                             <input type="number" autoFocus value={stockQuantityInput} onChange={(e) => setStockQuantityInput(e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full border rounded p-1.5 text-xs font-bold" placeholder="Cantidad..." />
                             <div className="flex justify-end gap-1 pt-2">
                                 <button type="button" onClick={() => setShowStockModal(false)} className="px-3 py-1 border text-xs rounded">Cancelar</button>
-                                <button type="button" onClick={handleSaveStockAdjustment} className="px-3.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded">Confirmar</button>
+                                <button type="button" disabled={stockLoading} onClick={handleSaveStockAdjustment} className="px-3.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded">Confirmar</button>
                             </div>
                         </div>
                     </div>

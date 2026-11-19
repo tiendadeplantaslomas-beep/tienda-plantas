@@ -70,6 +70,7 @@ export async function GET(request: Request) {
                 invoiced: sale.invoiced,
                 client: sale.customer ? sale.customer.name : 'CLIENTE MOSTRADOR',
                 clientEmail: sale.customer ? sale.customer.email : '',
+                clientPhone: sale.customer ? sale.customer.phone : '',
                 isShipping: sale.isShipping,
                 shippingAddress: sale.shippingAddress || 'S/D',
                 notes: sale.notes || '',

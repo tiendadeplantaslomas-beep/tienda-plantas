@@ -41,6 +41,116 @@ export interface SaveProductInput {
     stockWeb?: number;
 }
 
+export interface ProductSupplierBreakdown {
+    supplierId: string;
+    supplierName: string;
+    unitCost: number;
+    allocatedOtherCost: number;
+    finalUnitCost: number;
+    salePrice: number;
+    lastQuantity: number;
+    totalPurchasedQuantity: number;
+    lastPurchaseDate: string | null;
+}
+
+// ----------------------------------------------------------------------
+// HELPER DEDICADO: DESGLOSE POR DISTRIBUIDOR (PUNTO ÚNICO DE AJUSTE)
+// ----------------------------------------------------------------------
+
+function buildSuppliersBreakdown(rawProduct: any): {
+    suppliersBreakdown: ProductSupplierBreakdown[];
+    hasMultipleSuppliers: boolean;
+} {
+    const salePrice = Number(rawProduct.price) || 0;
+    const bySupplier = new Map<string, ProductSupplierBreakdown>();
+    const totalQtyBySupplier = new Map<string, number>();
+
+    const purchaseItems = Array.isArray(rawProduct.purchaseItems) ? rawProduct.purchaseItems : [];
+
+    // Primero acumulamos el total de unidades compradas por distribuidor
+    for (const item of purchaseItems) {
+        const supId = item?.purchase?.supplierId;
+        if (!supId) continue;
+        const qty = Number(item.quantity) || 0;
+        totalQtyBySupplier.set(supId, (totalQtyBySupplier.get(supId) || 0) + qty);
+    }
+
+    // Ordenamos por fecha de compra descendente para tomar la referencia más reciente de cada distribuidor
+    const sortedItems = [...purchaseItems].sort((a, b) => {
+        const dateA = a?.purchase?.date ? new Date(a.purchase.date).getTime() : 0;
+        const dateB = b?.purchase?.date ? new Date(b.purchase.date).getTime() : 0;
+        return dateB - dateA;
+    });
+
+    for (const item of sortedItems) {
+        const supId = item?.purchase?.supplierId;
+        const supName = item?.purchase?.supplier?.name || 'DISTRIBUIDOR S/N';
+        if (!supId) continue;
+
+        if (!bySupplier.has(supId)) {
+            const unitCost = Number(item.unitCost) || 0;
+            const allocatedOtherCost = Number(item.allocatedOtherCost) || 0;
+            const finalUnitCost = Number(item.finalUnitCost) > 0
+                ? Number(item.finalUnitCost)
+                : unitCost + allocatedOtherCost;
+
+            bySupplier.set(supId, {
+                supplierId: supId,
+                supplierName: supName,
+                unitCost,
+                allocatedOtherCost,
+                finalUnitCost,
+                salePrice,
+                lastQuantity: Number(item.quantity) || 0,
+                totalPurchasedQuantity: totalQtyBySupplier.get(supId) || 0,
+                lastPurchaseDate: item?.purchase?.date
+                    ? new Date(item.purchase.date).toISOString().split('T')[0]
+                    : null,
+            });
+        }
+    }
+
+    if (rawProduct.supplierId && !bySupplier.has(rawProduct.supplierId)) {
+        const unitCost = Number(rawProduct.cost) || 0;
+        const allocatedOtherCost = Number(rawProduct.otherCosts) || 0;
+        bySupplier.set(rawProduct.supplierId, {
+            supplierId: rawProduct.supplierId,
+            supplierName: rawProduct.supplier?.name || 'PROVEEDOR ASIGNADO',
+            unitCost,
+            allocatedOtherCost,
+            finalUnitCost: unitCost + allocatedOtherCost,
+            salePrice,
+            lastQuantity: 0,
+            totalPurchasedQuantity: 0,
+            lastPurchaseDate: null,
+        });
+    }
+
+    if (bySupplier.size === 0) {
+        const unitCost = Number(rawProduct.cost) || 0;
+        const allocatedOtherCost = Number(rawProduct.otherCosts) || 0;
+        bySupplier.set('SIN_PROVEEDOR', {
+            supplierId: 'SIN_PROVEEDOR',
+            supplierName: 'CARGA MANUAL / GENERAL',
+            unitCost,
+            allocatedOtherCost,
+            finalUnitCost: unitCost + allocatedOtherCost,
+            salePrice,
+            lastQuantity: Number(rawProduct.stock) || 0,
+            totalPurchasedQuantity: Number(rawProduct.stock) || 0,
+            lastPurchaseDate: null,
+        });
+    }
+
+    const suppliersBreakdown = Array.from(bySupplier.values());
+    const distinctRealSuppliers = suppliersBreakdown.filter(s => s.supplierId !== 'SIN_PROVEEDOR');
+
+    return {
+        suppliersBreakdown,
+        hasMultipleSuppliers: distinctRealSuppliers.length > 1,
+    };
+}
+
 // ----------------------------------------------------------------------
 // CATEGORÍAS
 // ----------------------------------------------------------------------
@@ -87,7 +197,6 @@ export async function updateCategory(data: { id: string; name: string; defaultMa
         const cleanName = data.name.trim().toUpperCase();
         if (!cleanName) return { error: 'El nombre de la categoría es obligatorio.' };
 
-        // Verificar si ya existe otra categoría con el mismo nombre
         const existing = await prisma.category.findFirst({
             where: { name: cleanName, NOT: { id: data.id } },
         });
@@ -97,7 +206,6 @@ export async function updateCategory(data: { id: string; name: string; defaultMa
 
         const newMargin = Number(data.defaultMargin ?? 30);
 
-        // 1. Actualizamos la categoría
         const category = await prisma.category.update({
             where: { id: data.id },
             data: {
@@ -106,9 +214,6 @@ export async function updateCategory(data: { id: string; name: string; defaultMa
             },
         });
 
-        // 2. ACTUALIZACIÓN EN BLOQUE: 
-        // Actualizamos el margen y recalculamos el precio final de todos los productos 
-        // de esta categoría que NO tengan el margen manual activado (customMargin = false)
         const productosAfectados = await prisma.product.findMany({
             where: {
                 categoryId: data.id,
@@ -118,7 +223,7 @@ export async function updateCategory(data: { id: string; name: string; defaultMa
 
         for (const prod of productosAfectados) {
             const baseCost = Number(prod.cost) + Number(prod.otherCosts);
-            let subtotalNoTax = newMargin >= 100 ? baseCost * (1 + newMargin / 100) : baseCost / (1 - (newMargin / 100));
+            const subtotalNoTax = newMargin >= 100 ? baseCost * (1 + newMargin / 100) : baseCost / (1 - (newMargin / 100));
             const finalWithTax = subtotalNoTax * (1 + Number(prod.taxRate) / 100);
             const newPrice = Math.round(finalWithTax);
 
@@ -212,25 +317,123 @@ export async function getProducts() {
             include: {
                 category: true,
                 supplier: true,
+                purchaseItems: {
+                    select: {
+                        quantity: true,
+                        unitCost: true,
+                        allocatedOtherCost: true,
+                        finalUnitCost: true,
+                        purchase: {
+                            select: {
+                                date: true,
+                                supplierId: true,
+                                supplier: {
+                                    select: { id: true, name: true }
+                                }
+                            }
+                        }
+                    }
+                }
             },
         });
 
-        const products = rawProducts.map((p) => ({
-            ...p,
-            price: Number(p.price),
-            cost: Number(p.cost),
-            otherCosts: Number(p.otherCosts),
-            margin: Number(p.margin),
-            taxRate: Number(p.taxRate),
-            stock: Number(p.stock),
-            minStock: Number(p.minStock),
-            stockWeb: Number(p.stockWeb),
-        }));
+        const products = rawProducts.map((p) => {
+            const { suppliersBreakdown, hasMultipleSuppliers } = buildSuppliersBreakdown(p);
+            const { purchaseItems, ...rest } = p;
+
+            return {
+                ...rest,
+                price: Number(p.price),
+                cost: Number(p.cost),
+                otherCosts: Number(p.otherCosts),
+                margin: Number(p.margin),
+                taxRate: Number(p.taxRate),
+                stock: Number(p.stock),
+                minStock: Number(p.minStock),
+                stockWeb: Number(p.stockWeb),
+                suppliersBreakdown,
+                hasMultipleSuppliers,
+            };
+        });
 
         return products;
     } catch (error) {
         console.error("Error detallado en getProducts:", error);
         return [];
+    }
+}
+
+export async function getSuggestedProductPrice(productId: string) {
+    try {
+        const product = await prisma.product.findUnique({
+            where: { id: productId },
+            select: {
+                id: true,
+                cost: true,
+                otherCosts: true,
+                margin: true,
+                taxRate: true,
+                price: true,
+            }
+        });
+
+        if (!product) {
+            return { suggestedPrice: 0, maxUnitCostWithExpenses: 0, sourceLabel: 'Sin datos' };
+        }
+
+        const threeMonthsAgo = new Date();
+        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+        const recentPurchaseItems = await prisma.purchaseItem.findMany({
+            where: {
+                productId,
+                purchase: {
+                    date: { gte: threeMonthsAgo }
+                }
+            },
+            select: {
+                unitCost: true,
+                allocatedOtherCost: true,
+                finalUnitCost: true,
+            }
+        });
+
+        let maxUnitCostWithExpenses = 0;
+        let sourceLabel = 'Últimos 3 meses (sin compras recientes)';
+
+        if (recentPurchaseItems.length > 0) {
+            maxUnitCostWithExpenses = recentPurchaseItems.reduce((maxVal, item) => {
+                const candidate = Number(item.finalUnitCost) > 0
+                    ? Number(item.finalUnitCost)
+                    : (Number(item.unitCost) + Number(item.allocatedOtherCost));
+                return candidate > maxVal ? candidate : maxVal;
+            }, 0);
+            sourceLabel = 'Máx. compra 3 meses c/ gastos';
+        } else {
+            maxUnitCostWithExpenses = Number(product.cost) + Number(product.otherCosts);
+        }
+
+        const marginVal = Number(product.margin ?? 100);
+        const taxVal = Number(product.taxRate ?? 21);
+
+        let suggestedPrice = 0;
+        if (maxUnitCostWithExpenses > 0) {
+            const subtotalNoTax = marginVal >= 100
+                ? maxUnitCostWithExpenses * (1 + marginVal / 100)
+                : maxUnitCostWithExpenses / (1 - (marginVal / 100));
+            suggestedPrice = Math.round(subtotalNoTax * (1 + taxVal / 100));
+        } else {
+            suggestedPrice = Number(product.price) || 0;
+        }
+
+        return {
+            suggestedPrice,
+            maxUnitCostWithExpenses: Math.round(maxUnitCostWithExpenses),
+            sourceLabel
+        };
+    } catch (error) {
+        console.error('Error en getSuggestedProductPrice:', error);
+        return { suggestedPrice: 0, maxUnitCostWithExpenses: 0, sourceLabel: 'Error al consultar' };
     }
 }
 
@@ -323,40 +526,37 @@ export async function saveProduct(data: SaveProductInput) {
         }
 
         const productData = {
-            name: name.trim().toUpperCase(),
-            code,
+            name,
+            code: finalCode,
             category: {
-                connect: { id: categoryId }
+                connect: { id: data.categoryId }
             },
-            // 👇 SOLUCIÓN: Solo agregamos 'supplier' si realmente seleccionaron uno
-            ...(supplierId ? {
+            ...(data.supplierId ? {
                 supplier: {
-                    connect: { id: supplierId }
+                    connect: { id: data.supplierId }
                 }
             } : {}),
-            cost: Number(cost) || 0,
-            otherCosts: Number(otherCosts) || 0,
-            margin: Number(margin) || 0,
-            customMargin: Boolean(customMargin),
-            taxRate: Number(taxRate) || 0,
-            price: Number(price) || 0,
-            stock: Number(stock) || 0,
-            minStock: Number(minStock) || 0,
-            destacado: Boolean(destacado),
-            color: color ? color.trim().toUpperCase() : null,
-            tamano: tamano ? tamano.trim().toUpperCase() : null,
-            stockWeb: stockWeb !== '' ? Number(stockWeb) : Number(stock) || 0,
-            imageUrl: imageUrl.trim() || '/sinfoto.png'
+            cost: Number(data.cost) || 0,
+            otherCosts: Number(data.otherCosts) || 0,
+            margin: Number(data.margin) || 0,
+            customMargin: Boolean(data.customMargin),
+            taxRate: Number(data.taxRate) || 0,
+            price: Number(data.price) || 0,
+            stock: Number(data.stock) || 0,
+            minStock: Number(data.minStock) || 0,
+            destacado: Boolean(data.destacado),
+            color: data.color ? data.color.trim().toUpperCase() : null,
+            tamano: data.tamano ? data.tamano.trim().toUpperCase() : null,
+            stockWeb: data.stockWeb !== undefined ? Number(data.stockWeb) : Number(data.stock) || 0,
+            imageUrl: finalImageUrl || '/sinfoto.png'
         };
 
-        // Luego ejecutás el create o update según corresponda:
-        if (id) {
+        if (data.id) {
             await prisma.product.update({
-                where: { id },
+                where: { id: data.id },
                 data: {
                     ...productData,
-                    // En el update SÍ se puede usar disconnect si no hay proveedor:
-                    supplier: supplierId ? { connect: { id: supplierId } } : { disconnect: true }
+                    supplier: data.supplierId ? { connect: { id: data.supplierId } } : { disconnect: true }
                 }
             });
         } else {
@@ -367,6 +567,7 @@ export async function saveProduct(data: SaveProductInput) {
 
         revalidatePath('/');
         revalidatePath('/tienda');
+        revalidatePath('/productos');
 
         return { success: true };
     } catch (error: any) {

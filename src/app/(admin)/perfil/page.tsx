@@ -1,36 +1,36 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Save, Camera } from 'lucide-react';
-import { useSession } from 'next-auth/react'; // 1. Importamos useSession
+import { getCurrentUserProfile, updateCurrentUserProfile } from '@/actions/client-actions';
 
 export default function AdminPerfilPage() {
-    const { update } = useSession(); // 2. Extraemos la función update
     const [nombre, setNombre] = useState('');
     const [email, setEmail] = useState('');
+    const [rol, setRol] = useState('PERSONAL');
     const [imagenUrl, setImagenUrl] = useState('');
     const [loading, setLoading] = useState(true);
-    const [guardando, setGuardando] = useState(false);
+    const [isPending, startTransition] = useTransition();
     const [mensaje, setMensaje] = useState('');
+    const [error, setError] = useState('');
 
     useEffect(() => {
         async function fetchPerfil() {
             try {
-                const res = await fetch('/api/admin/perfil');
-                if (res.ok) {
-                    const data = await res.json();
-                    setNombre(data.nombre || 'Daniel Urraca');
-                    setEmail(data.email || 'admin@tiendadeplantas.com');
-                    setImagenUrl(data.imagenUrl || '');
+                // Obtenemos el perfil directamente desde TiDB usando Prisma a través de la Server Action
+                const user = await getCurrentUserProfile();
+                if (user) {
+                    setNombre(user.name || '');
+                    setEmail(user.email || '');
+                    setRol(user.role ? user.role.toUpperCase() : 'PERSONAL');
+                    setImagenUrl(user.image || '');
                 } else {
-                    setNombre('Daniel Urraca');
-                    setEmail('admin@tiendadeplantas.com');
+                    setError('No se pudo encontrar la sesión activa del usuario.');
                 }
-            } catch (error) {
-                console.error('Error al cargar perfil:', error);
-                setNombre('Daniel Urraca');
-                setEmail('admin@tiendadeplantas.com');
+            } catch (err) {
+                console.error('Error al cargar perfil:', err);
+                setError('Error al conectar con la base de datos.');
             } finally {
                 setLoading(false);
             }
@@ -38,7 +38,7 @@ export default function AdminPerfilPage() {
         fetchPerfil();
     }, []);
 
-    // Manejador para cargar la imagen localmente y convertirla a base64
+    // Manejador para cargar la imagen localmente y convertirla a base64 para guardarla en TiDB
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -52,43 +52,34 @@ export default function AdminPerfilPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setGuardando(true);
         setMensaje('');
+        setError('');
 
-        try {
-            const res = await fetch('/api/admin/perfil', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nombre, email, imagenUrl })
+        startTransition(async () => {
+            const res = await updateCurrentUserProfile({
+                name: nombre,
+                email: email,
+                image: imagenUrl
             });
 
-            if (res.ok) {
-                // 3. Forzamos la actualización de la sesión de NextAuth en caliente
-                await update({
-                    name: nombre,
-                    image: imagenUrl,
-                });
-
-                setMensaje('¡Cambios guardados correctamente!');
+            if (res.error) {
+                setError(res.error);
             } else {
-                setMensaje('Hubo un error al guardar los cambios.');
+                setMensaje('¡Cambios guardados correctamente en TiDB!');
+                setTimeout(() => setMensaje(''), 4000);
             }
-        } catch (error) {
-            console.error('Error al guardar:', error);
-            setMensaje('Error de conexión con el servidor.');
-        } finally {
-            setGuardando(false);
-            setTimeout(() => setMensaje(''), 4000);
-        }
+        });
     };
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-stone-100 p-6 flex items-center justify-center text-xs text-stone-500">
-                Cargando perfil...
+            <div className="min-h-screen bg-stone-100 p-6 flex items-center justify-center text-xs text-stone-500 font-bold uppercase">
+                Cargando perfil desde la base de datos...
             </div>
         );
     }
+
+    const iniciales = nombre ? nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'US';
 
     return (
         <div className="space-y-4 font-sans text-stone-800 min-h-screen bg-stone-100 p-4 md:p-6 max-w-4xl mx-auto">
@@ -99,8 +90,8 @@ export default function AdminPerfilPage() {
                         <ArrowLeft className="w-4 h-4" />
                     </Link>
                     <div>
-                        <h1 className="text-sm font-extrabold text-stone-900 uppercase">Editar Perfil de Administrador</h1>
-                        <p className="text-[10px] text-stone-500">Modifica tus datos personales y credenciales</p>
+                        <h1 className="text-sm font-extrabold text-stone-900 uppercase">Editar Perfil de {rol}</h1>
+                        <p className="text-[10px] text-stone-500">Modifica tus datos personales y credenciales de acceso online</p>
                     </div>
                 </div>
                 <Link href="/dashboard" className="text-xs font-bold text-stone-600 hover:text-stone-900">
@@ -114,6 +105,11 @@ export default function AdminPerfilPage() {
                     {mensaje}
                 </div>
             )}
+            {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl p-3 font-medium text-center shadow-xs">
+                    {error}
+                </div>
+            )}
 
             {/* Formulario de Edición */}
             <form onSubmit={handleSubmit} className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xs space-y-6">
@@ -125,7 +121,7 @@ export default function AdminPerfilPage() {
                             <img src={imagenUrl} alt="Avatar" className="w-16 h-16 rounded-2xl object-cover border border-stone-200 shadow-sm" />
                         ) : (
                             <div className="w-16 h-16 bg-emerald-700 text-white rounded-2xl flex items-center justify-center font-extrabold text-xl shadow-sm">
-                                DU
+                                {iniciales}
                             </div>
                         )}
                     </div>
@@ -151,7 +147,7 @@ export default function AdminPerfilPage() {
                                 </button>
                             )}
                         </div>
-                        <p className="text-[10px] text-stone-400">Formatos admitidos: JPG, PNG. Tamaño optimizado para vista previa.</p>
+                        <p className="text-[10px] text-stone-400">Formatos admitidos: JPG, PNG. Se almacena de forma persistente en TiDB.</p>
                     </div>
                 </div>
 
@@ -162,9 +158,9 @@ export default function AdminPerfilPage() {
                         <input
                             type="text"
                             value={nombre}
-                            onChange={(e) => setNombre(e.target.value)}
+                            onChange={(e) => setNombre(e.target.value.toUpperCase())}
                             required
-                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 uppercase"
                         />
                     </div>
 
@@ -185,8 +181,8 @@ export default function AdminPerfilPage() {
                     </div>
 
                     <div className="p-3 bg-stone-50 rounded-xl border border-stone-100 space-y-1">
-                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">Legajo Interno</span>
-                        <span className="font-bold text-stone-700">ADM-001</span>
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">Rol y Legajo Interno</span>
+                        <span className="font-bold text-emerald-700 uppercase">{rol} &bull; Sistema Activo</span>
                     </div>
                 </div>
 
@@ -197,10 +193,10 @@ export default function AdminPerfilPage() {
                     </Link>
                     <button
                         type="submit"
-                        disabled={guardando}
+                        disabled={isPending}
                         className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
                     >
-                        <Save className="w-3.5 h-3.5" /> {guardando ? 'Guardando...' : 'Guardar Cambios'}
+                        <Save className="w-3.5 h-3.5" /> {isPending ? 'Guardando...' : 'Guardar Cambios'}
                     </button>
                 </div>
             </form>

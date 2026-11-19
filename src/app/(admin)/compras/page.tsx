@@ -46,7 +46,6 @@ export default function ComprasBatchPage() {
     const [batchNotes, setBatchNotes] = useState<string>('');
     const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
 
-    // Paginación ajustada para el espacio con título
     const [cartPage, setCartPage] = useState(1);
     const cartItemsPerPage = 6;
 
@@ -68,6 +67,11 @@ export default function ComprasBatchPage() {
     const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [docNumber, setDocNumber] = useState('');
     const [docType, setDocType] = useState<'FACTURA' | 'REMITO' | 'PRESUPUESTO'>('PRESUPUESTO');
+
+    // Forma de pago y recargos de transferencia (6% comisión + 21% IVA sobre total de productos sin gastos)
+    const [paymentMethod, setPaymentMethod] = useState<'CONTADO' | 'TRANSFERENCIA'>('CONTADO');
+    const [applyCommission6, setApplyCommission6] = useState<boolean>(false);
+    const [applyVat21, setApplyVat21] = useState<boolean>(false);
 
     const [cart, setCart] = useState<SinglePurchaseItemInput[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -210,6 +214,16 @@ export default function ComprasBatchPage() {
         setCart(prev => (Array.isArray(prev) ? prev : []).filter(item => item.productId !== productId));
     };
 
+    const safeCart = Array.isArray(cart) ? cart : [];
+    const currentInvoiceSubtotal = safeCart.reduce((acc, item) => acc + (Number(item.unitCost) || 0) * (Number(item.quantity) || 0), 0);
+
+    const currentCommission6 = paymentMethod === 'TRANSFERENCIA' && applyCommission6
+        ? Math.round(currentInvoiceSubtotal * 0.06)
+        : 0;
+    const currentVat21 = paymentMethod === 'TRANSFERENCIA' && applyVat21
+        ? Math.round(currentInvoiceSubtotal * 0.21)
+        : 0;
+
     const handleAddInvoiceToBatch = () => {
         if (!supplierQuery.trim()) {
             alert('⚠️ Debe seleccionar o ingresar el nombre de un proveedor.');
@@ -235,6 +249,9 @@ export default function ComprasBatchPage() {
             docType,
             docNumber: docNumber.trim() || undefined,
             date: purchaseDate,
+            paymentMethod,
+            applyCommission6: paymentMethod === 'TRANSFERENCIA' ? applyCommission6 : false,
+            applyVat21: paymentMethod === 'TRANSFERENCIA' ? applyVat21 : false,
             items: [...cart]
         };
 
@@ -245,6 +262,9 @@ export default function ComprasBatchPage() {
         setDocNumber('');
         setSelectedSupplier(null);
         setSupplierQuery('');
+        setPaymentMethod('CONTADO');
+        setApplyCommission6(false);
+        setApplyVat21(false);
         if (searchInputRef.current) searchInputRef.current.focus();
     };
 
@@ -264,6 +284,11 @@ export default function ComprasBatchPage() {
 
         setDocType(target.docType);
         setDocNumber(target.docNumber || '');
+        if (target.date) setPurchaseDate(target.date);
+        const method = target.paymentMethod || 'CONTADO';
+        setPaymentMethod(method);
+        setApplyCommission6(method === 'TRANSFERENCIA' ? Boolean(target.applyCommission6) : false);
+        setApplyVat21(method === 'TRANSFERENCIA' ? Boolean(target.applyVat21) : false);
         setCart(target.items);
         setBatchInvoices(prev => prev.filter((_, i) => i !== indexReal));
     };
@@ -361,18 +386,23 @@ export default function ComprasBatchPage() {
         }
     };
 
-    const safeCart = Array.isArray(cart) ? cart : [];
-    const currentInvoiceSubtotal = safeCart.reduce((acc, item) => acc + (Number(item.unitCost) || 0) * (Number(item.quantity) || 0), 0);
-
     const batchTotalSubtotal = batchInvoices.reduce((acc, inv) => {
         return acc + (inv.items || []).reduce((sum, item) => sum + (Number(item.unitCost) || 0) * (Number(item.quantity) || 0), 0);
+    }, 0);
+
+    const batchTotalPaymentCharges = batchInvoices.reduce((acc, inv) => {
+        const invSub = (inv.items || []).reduce((sum, item) => sum + (Number(item.unitCost) || 0) * (Number(item.quantity) || 0), 0);
+        if ((inv.paymentMethod || 'CONTADO') !== 'TRANSFERENCIA') return acc;
+        const com6 = inv.applyCommission6 ? Math.round(invSub * 0.06) : 0;
+        const iva21 = inv.applyVat21 ? Math.round(invSub * 0.21) : 0;
+        return acc + com6 + iva21;
     }, 0);
 
     const batchTotalUnits = batchInvoices.reduce((acc, inv) => {
         return acc + (inv.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
     }, 0);
 
-    const grandTotal = batchTotalSubtotal + globalFreight;
+    const grandTotal = batchTotalSubtotal + globalFreight + batchTotalPaymentCharges;
 
     const totalCartPages = Math.ceil(safeCart.length / cartItemsPerPage) || 1;
     const paginatedCart = safeCart.slice((cartPage - 1) * cartItemsPerPage, cartPage * cartItemsPerPage);
@@ -393,7 +423,6 @@ export default function ComprasBatchPage() {
                 }
             `}</style>
 
-            {/* ENCABEZADO / TÍTULO DE LA PÁGINA */}
             <div className="bg-white px-4 py-2.5 border-b border-slate-200 shadow-2xs flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
                     <span className="text-lg">🛒</span>
@@ -416,16 +445,17 @@ export default function ComprasBatchPage() {
 
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 overflow-hidden">
 
-                {/* COLUMNA IZQUIERDA: PROVEEDOR */}
+                {/* COLUMNA IZQUIERDA: PROVEEDOR Y FORMA DE PAGO */}
                 <div className="lg:col-span-3 flex flex-col gap-3 shrink-0 overflow-y-auto">
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2.5 text-xs">
                         <div className="flex justify-between items-center border-b border-slate-100 pb-1">
                             <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                                 1. Datos del Proveedor
                             </h3>
                             <button
+                                type="button"
                                 onClick={() => setIsSupplierModalOpen(true)}
-                                className="text-emerald-700 font-bold hover:underline text-[10px]"
+                                className="text-emerald-700 font-bold hover:underline text-[10px] cursor-pointer"
                             >
                                 + Alta Rápida
                             </button>
@@ -502,6 +532,60 @@ export default function ComprasBatchPage() {
                                     />
                                 </div>
                             </div>
+
+                            {/* MEDIO DE PAGO DEL COMPROBANTE */}
+                            <div className="pt-2 border-t border-slate-100 space-y-2">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">FORMA DE PAGO</label>
+                                    <select
+                                        value={paymentMethod}
+                                        onChange={(e) => {
+                                            const nextMethod = e.target.value as 'CONTADO' | 'TRANSFERENCIA';
+                                            setPaymentMethod(nextMethod);
+                                            if (nextMethod === 'CONTADO') {
+                                                setApplyCommission6(false);
+                                                setApplyVat21(false);
+                                            }
+                                        }}
+                                        className="w-full border border-slate-200 rounded p-1.5 font-bold uppercase bg-slate-50 outline-none text-xs"
+                                    >
+                                        <option value="CONTADO">CONTADO</option>
+                                        <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                                    </select>
+                                </div>
+
+                                {paymentMethod === 'TRANSFERENCIA' && (
+                                    <div className="p-2 rounded-lg bg-amber-50/70 border border-amber-200 space-y-1.5">
+                                        <p className="text-[9px] font-black text-amber-900 uppercase">
+                                            Entidad (Banco / MP) s/ productos (sin gastos)
+                                        </p>
+                                        <label className="flex items-center justify-between text-[10px] font-bold text-slate-700 cursor-pointer select-none">
+                                            <span className="flex items-center gap-1.5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={applyCommission6}
+                                                    onChange={(e) => setApplyCommission6(e.target.checked)}
+                                                    className="w-3.5 h-3.5 text-emerald-700 rounded cursor-pointer"
+                                                />
+                                                Comisión 6%
+                                            </span>
+                                            <span className="font-mono text-slate-800">${currentCommission6.toLocaleString('es-AR')}</span>
+                                        </label>
+                                        <label className="flex items-center justify-between text-[10px] font-bold text-slate-700 cursor-pointer select-none">
+                                            <span className="flex items-center gap-1.5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={applyVat21}
+                                                    onChange={(e) => setApplyVat21(e.target.checked)}
+                                                    className="w-3.5 h-3.5 text-emerald-700 rounded cursor-pointer"
+                                                />
+                                                IVA 21%
+                                            </span>
+                                            <span className="font-mono text-slate-800">${currentVat21.toLocaleString('es-AR')}</span>
+                                        </label>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -527,8 +611,9 @@ export default function ComprasBatchPage() {
                                 className="w-full text-sm font-bold placeholder-slate-400 text-slate-800 outline-none uppercase bg-transparent px-2"
                             />
                             <button
+                                type="button"
                                 onClick={handleOpenQuickProductModal}
-                                className="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold uppercase shadow-xs shrink-0 flex items-center gap-1"
+                                className="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold uppercase shadow-xs shrink-0 flex items-center gap-1 cursor-pointer"
                             >
                                 ➕ Alta al Vuelo
                             </button>
@@ -548,7 +633,7 @@ export default function ComprasBatchPage() {
                                                 <span className="font-bold text-slate-800">{p.name}</span>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <span className="font-mono font-bold text-emerald-700 text-sm">Costo: $ {p.cost.toLocaleString()}</span>
+                                                <span className="font-mono font-bold text-emerald-700 text-sm">Costo Unit.: $ {p.cost.toLocaleString()}</span>
                                             </div>
                                         </div>
                                     ))
@@ -556,8 +641,9 @@ export default function ComprasBatchPage() {
                                     <div className="p-3 text-center space-y-2">
                                         <p className="text-xs text-slate-500">No se encontró el producto "<strong className="uppercase">{searchQuery}</strong>"</p>
                                         <button
+                                            type="button"
                                             onClick={handleOpenQuickProductModal}
-                                            className="px-3 py-1 bg-emerald-600 text-white rounded text-xs font-bold uppercase hover:bg-emerald-500"
+                                            className="px-3 py-1 bg-emerald-600 text-white rounded text-xs font-bold uppercase hover:bg-emerald-500 cursor-pointer"
                                         >
                                             ➕ Dar de Alta al Vuelo
                                         </button>
@@ -570,7 +656,9 @@ export default function ComprasBatchPage() {
                     <div className="bg-white rounded-xl border border-slate-200 shadow-2xs flex-1 flex flex-col overflow-hidden">
                         <div className="p-2 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs font-bold text-slate-700">
                             <span>REMITO / FACTURA EN CARGA ({safeCart.length})</span>
-                            <span>Subtotal: ${currentInvoiceSubtotal.toLocaleString()}</span>
+                            <span>
+                                Subtotal Prod.: ${(currentInvoiceSubtotal + currentCommission6 + currentVat21).toLocaleString()}
+                            </span>
                         </div>
                         <div className="overflow-x-auto flex-1">
                             <table className="w-full text-left text-xs border-collapse">
@@ -620,8 +708,9 @@ export default function ComprasBatchPage() {
                                                 <td className="p-2 text-right font-mono font-bold text-slate-800">$ {((item.unitCost || 0) * (Number(item.quantity) || 0)).toLocaleString()}</td>
                                                 <td className="p-2 text-center">
                                                     <button
+                                                        type="button"
                                                         onClick={() => handleRemoveItem(item.productId!)}
-                                                        className="text-rose-500 hover:text-rose-700 font-bold"
+                                                        className="text-rose-500 hover:text-rose-700 font-bold cursor-pointer"
                                                     >✕</button>
                                                 </td>
                                             </tr>
@@ -631,27 +720,29 @@ export default function ComprasBatchPage() {
                             </table>
                         </div>
 
-                        {/* BARRA DE PAGINACIÓN */}
                         <div className="py-1.5 px-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[11px] font-bold text-slate-600">
                             <span>Pág. {cartPage} de {totalCartPages} ({safeCart.length} ítems)</span>
                             <div className="space-x-1">
                                 <button
+                                    type="button"
                                     disabled={cartPage === 1}
                                     onClick={() => setCartPage(p => Math.max(p - 1, 1))}
-                                    className="px-2 py-0.5 bg-white border border-slate-200 rounded disabled:opacity-40"
+                                    className="px-2 py-0.5 bg-white border border-slate-200 rounded disabled:opacity-40 cursor-pointer"
                                 >◀</button>
                                 <button
+                                    type="button"
                                     disabled={cartPage >= totalCartPages}
                                     onClick={() => setCartPage(p => Math.min(p + 1, totalCartPages))}
-                                    className="px-2 py-0.5 bg-white border border-slate-200 rounded disabled:opacity-40"
+                                    className="px-2 py-0.5 bg-white border border-slate-200 rounded disabled:opacity-40 cursor-pointer"
                                 >▶</button>
                             </div>
                         </div>
 
                         <div className="p-2.5 bg-slate-50 border-t border-slate-200">
                             <button
+                                type="button"
                                 onClick={handleAddInvoiceToBatch}
-                                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                             >
                                 📥 Guardar Comprobante en el Lote
                             </button>
@@ -678,6 +769,8 @@ export default function ComprasBatchPage() {
                                     const indexReal = (invoicesPage - 1) * invoicesPerPage + idx;
                                     const invSub = inv.items.reduce((acc, i) => acc + i.unitCost * i.quantity, 0);
                                     const invUnits = inv.items.reduce((acc, i) => acc + i.quantity, 0);
+                                    const com6 = (inv.paymentMethod || 'CONTADO') === 'TRANSFERENCIA' && inv.applyCommission6 ? Math.round(invSub * 0.06) : 0;
+                                    const iva21 = (inv.paymentMethod || 'CONTADO') === 'TRANSFERENCIA' && inv.applyVat21 ? Math.round(invSub * 0.21) : 0;
                                     return (
                                         <div key={indexReal} className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1 text-xs">
                                             <div className="flex justify-between items-start font-bold text-slate-800">
@@ -687,15 +780,17 @@ export default function ComprasBatchPage() {
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <button
+                                                        type="button"
                                                         onClick={() => handleEditInvoiceFromBatch(indexReal)}
-                                                        className="text-slate-500 hover:text-slate-800 font-bold text-[11px]"
+                                                        className="text-slate-500 hover:text-slate-800 font-bold text-[11px] cursor-pointer"
                                                         title="Editar Comprobante"
                                                     >
                                                         ✏️ Editar
                                                     </button>
                                                     <button
+                                                        type="button"
                                                         onClick={() => handleRemoveInvoiceFromBatch(indexReal)}
-                                                        className="text-rose-600 hover:text-rose-800 font-bold"
+                                                        className="text-rose-600 hover:text-rose-800 font-bold cursor-pointer"
                                                         title="Eliminar Comprobante"
                                                     >
                                                         ✕
@@ -703,8 +798,8 @@ export default function ComprasBatchPage() {
                                                 </div>
                                             </div>
                                             <div className="flex justify-between text-[11px] text-slate-500 font-mono">
-                                                <span>{invUnits} u. en {inv.items.length} productos</span>
-                                                <span className="font-bold text-slate-900">$ {invSub.toLocaleString()}</span>
+                                                <span>{invUnits} u. en {inv.items.length} prod. • {inv.paymentMethod || 'CONTADO'}</span>
+                                                <span className="font-bold text-slate-900">$ {(invSub + com6 + iva21).toLocaleString()}</span>
                                             </div>
                                         </div>
                                     );
@@ -712,19 +807,20 @@ export default function ComprasBatchPage() {
                             )}
                         </div>
 
-                        {/* PAGINADOR DE COMPROBANTES */}
                         <div className="py-1 px-2 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[11px] font-bold text-slate-600 shrink-0">
                             <span>Pág. {invoicesPage} de {totalInvoicesPages}</span>
                             <div className="space-x-1">
                                 <button
+                                    type="button"
                                     disabled={invoicesPage === 1}
                                     onClick={() => setInvoicesPage(p => Math.max(p - 1, 1))}
-                                    className="px-2 py-0.5 bg-white border border-slate-200 rounded disabled:opacity-40"
+                                    className="px-2 py-0.5 bg-white border border-slate-200 rounded disabled:opacity-40 cursor-pointer"
                                 >◀</button>
                                 <button
+                                    type="button"
                                     disabled={invoicesPage >= totalInvoicesPages}
                                     onClick={() => setInvoicesPage(p => Math.min(p + 1, totalInvoicesPages))}
-                                    className="px-2 py-0.5 bg-white border border-slate-200 rounded disabled:opacity-40"
+                                    className="px-2 py-0.5 bg-white border border-slate-200 rounded disabled:opacity-40 cursor-pointer"
                                 >▶</button>
                             </div>
                         </div>
@@ -732,10 +828,11 @@ export default function ComprasBatchPage() {
                         <div className="border-t border-slate-200 pt-2 space-y-2 shrink-0">
                             <div>
                                 <button
+                                    type="button"
                                     onClick={() => setIsFreightModalOpen(true)}
-                                    className={`w-full py-2.5 border rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-between px-3 ${globalFreight === 0
-                                            ? 'bg-rose-100 border-rose-400 text-rose-900 shadow-sm ring-2 ring-rose-300 animate-pulse'
-                                            : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900'
+                                    className={`w-full py-2.5 border rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-between px-3 cursor-pointer ${globalFreight === 0
+                                        ? 'bg-rose-100 border-rose-400 text-rose-900 shadow-sm ring-2 ring-rose-300 animate-pulse'
+                                        : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900'
                                         }`}
                                 >
                                     <div className="flex flex-col text-left">
@@ -756,6 +853,12 @@ export default function ComprasBatchPage() {
                                     <span>Subtotal Mercaderías:</span>
                                     <span className="font-mono text-white">$ {batchTotalSubtotal.toLocaleString()}</span>
                                 </div>
+                                {batchTotalPaymentCharges > 0 && (
+                                    <div className="flex justify-between text-xs text-slate-400">
+                                        <span>Comisión 6% / IVA 21% Transf.:</span>
+                                        <span className="font-mono text-sky-300">$ {batchTotalPaymentCharges.toLocaleString()}</span>
+                                    </div>
+                                )}
                                 <div className="flex justify-between text-xs text-slate-400">
                                     <span>Gastos Transporte/Viaje:</span>
                                     <span className="font-mono text-amber-400">$ {globalFreight.toLocaleString()}</span>
@@ -769,6 +872,7 @@ export default function ComprasBatchPage() {
                             </div>
 
                             <button
+                                type="button"
                                 onClick={handleRegisterBatch}
                                 disabled={isSubmittingBatch || batchInvoices.length === 0}
                                 className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white rounded-xl font-bold text-xs uppercase shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
@@ -789,7 +893,7 @@ export default function ComprasBatchPage() {
                             <h3 className="font-bold text-sm text-slate-800 uppercase flex items-center gap-1.5 text-emerald-800">
                                 🛞 Cargar Gastos de Transporte y Viaje (Obligatorio)
                             </h3>
-                            <button onClick={() => setIsFreightModalOpen(false)} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                            <button type="button" onClick={() => setIsFreightModalOpen(false)} className="text-slate-400 hover:text-slate-700 font-bold cursor-pointer">✕</button>
                         </div>
 
                         <div className="space-y-2 text-xs">
@@ -840,8 +944,9 @@ export default function ComprasBatchPage() {
                                 Total Gastos: <span className="font-mono text-emerald-700 text-sm">${globalFreight.toLocaleString()}</span>
                             </div>
                             <button
+                                type="button"
                                 onClick={() => setIsFreightModalOpen(false)}
-                                className="px-4 py-1.5 bg-emerald-700 text-white rounded text-xs font-bold uppercase hover:bg-emerald-600 shadow-xs"
+                                className="px-4 py-1.5 bg-emerald-700 text-white rounded text-xs font-bold uppercase hover:bg-emerald-600 shadow-xs cursor-pointer"
                             >
                                 💾 Aplicar Gastos
                             </button>
@@ -858,7 +963,7 @@ export default function ComprasBatchPage() {
                             <h3 className="font-bold text-sm text-slate-800 uppercase flex items-center gap-1.5">
                                 🏢 Alta Rápida de Proveedor
                             </h3>
-                            <button onClick={() => setIsSupplierModalOpen(false)} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                            <button type="button" onClick={() => setIsSupplierModalOpen(false)} className="text-slate-400 hover:text-slate-700 font-bold cursor-pointer">✕</button>
                         </div>
 
                         {supError && (
@@ -902,14 +1007,16 @@ export default function ComprasBatchPage() {
 
                         <div className="pt-2 flex justify-end gap-2">
                             <button
+                                type="button"
                                 onClick={() => setIsSupplierModalOpen(false)}
-                                className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase hover:bg-slate-200"
+                                className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase hover:bg-slate-200 cursor-pointer"
                             >
                                 Cancelar
                             </button>
                             <button
+                                type="button"
                                 onClick={handleSaveQuickSupplier}
-                                className="px-4 py-1.5 bg-emerald-700 text-white rounded text-xs font-bold uppercase hover:bg-emerald-600 shadow-xs"
+                                className="px-4 py-1.5 bg-emerald-700 text-white rounded text-xs font-bold uppercase hover:bg-emerald-600 shadow-xs cursor-pointer"
                             >
                                 💾 Guardar Proveedor
                             </button>
@@ -926,7 +1033,7 @@ export default function ComprasBatchPage() {
                             <h3 className="font-bold text-sm text-slate-800 uppercase flex items-center gap-1.5">
                                 🌿 Alta Rápida de Producto al Vuelo
                             </h3>
-                            <button onClick={() => setIsQuickProductModalOpen(false)} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                            <button type="button" onClick={() => setIsQuickProductModalOpen(false)} className="text-slate-400 hover:text-slate-700 font-bold cursor-pointer">✕</button>
                         </div>
 
                         {quickError && (
@@ -999,14 +1106,16 @@ export default function ComprasBatchPage() {
 
                         <div className="pt-2 flex justify-end gap-2">
                             <button
+                                type="button"
                                 onClick={() => setIsQuickProductModalOpen(false)}
-                                className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase hover:bg-slate-200"
+                                className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase hover:bg-slate-200 cursor-pointer"
                             >
                                 Cancelar
                             </button>
                             <button
+                                type="button"
                                 onClick={handleSaveQuickProduct}
-                                className="px-4 py-1.5 bg-emerald-700 text-white rounded text-xs font-bold uppercase hover:bg-emerald-600 shadow-xs"
+                                className="px-4 py-1.5 bg-emerald-700 text-white rounded text-xs font-bold uppercase hover:bg-emerald-600 shadow-xs cursor-pointer"
                             >
                                 💾 Guardar y Agregar
                             </button>
