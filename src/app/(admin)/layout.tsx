@@ -2,22 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { SessionProvider, useSession, signOut } from 'next-auth/react';
+import { usePathname, useRouter } from 'next/navigation';
+import { SessionProvider } from 'next-auth/react';
 
 function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     const [fechaActual, setFechaActual] = useState('');
+    const [userName, setUserName] = useState('Personal Interno');
+    const [userRole, setUserRole] = useState('CAJERO');
     const pathname = usePathname();
-    const { data: session } = useSession();
+    const router = useRouter();
 
     const esDashboard = pathname === '/dashboard';
 
-    // Datos dinámicos de la sesión de NextAuth
-    const userName = session?.user?.name || 'Administrador';
-    const userRole = (session?.user as any)?.role || 'ADMIN';
-    const userEmail = session?.user?.email || '';
-
     useEffect(() => {
+        // 1. Cargar fecha actual
         const hoy = new Date();
         const opciones: Intl.DateTimeFormatOptions = {
             weekday: 'long',
@@ -27,7 +25,30 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         };
         const fechaStr = hoy.toLocaleDateString('es-AR', opciones);
         setFechaActual(fechaStr.charAt(0).toUpperCase() + fechaStr.slice(1));
+
+        // 2. Cargar datos reales del usuario desde localStorage
+        const storedName = localStorage.getItem('user_name');
+        const storedRole = localStorage.getItem('user_role');
+
+        if (storedName) setUserName(storedName);
+        if (storedRole) setUserRole(storedRole.toUpperCase());
     }, []);
+
+    const handleLogout = () => {
+        // 1. Destruimos las cookies del servidor (sesión y email)
+        document.cookie = "erp_session_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        document.cookie = "erp_user_email=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+
+        // 2. Limpieza total y forzada del localStorage específico del ERP
+        localStorage.removeItem('user_email');
+        localStorage.removeItem('user_name');
+        localStorage.removeItem('user_role');
+        localStorage.clear();
+
+        // 3. Redirección limpia bloqueando el botón atrás
+        router.replace('/login');
+        router.refresh();
+    };
 
     return (
         <div
@@ -88,7 +109,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                                 <span>Tienda Pública</span>
                             </a>
                             <button
-                                onClick={() => signOut({ callbackUrl: '/login' })}
+                                onClick={handleLogout}
                                 className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-bold rounded shadow-2xs transition-all cursor-pointer font-bold"
                                 title="Cerrar Sesión"
                             >
