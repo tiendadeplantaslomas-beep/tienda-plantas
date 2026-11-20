@@ -3,9 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { SessionProvider } from 'next-auth/react';
 
-function AdminLayoutContent({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const [fechaActual, setFechaActual] = useState('');
     const [userName, setUserName] = useState('Personal Interno');
     const [userRole, setUserRole] = useState('CAJERO');
@@ -38,6 +37,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         // 1. Destruimos las cookies del servidor (sesión y email)
         document.cookie = "erp_session_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
         document.cookie = "erp_user_email=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        document.cookie = "admin_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 
         // 2. Limpieza total y forzada del localStorage específico del ERP
         localStorage.removeItem('user_email');
@@ -137,13 +137,5 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                 </footer>
             </div>
         </div>
-    );
-}
-
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-    return (
-        <SessionProvider>
-            <AdminLayoutContent>{children}</AdminLayoutContent>
-        </SessionProvider>
     );
 }

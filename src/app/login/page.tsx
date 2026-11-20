@@ -49,7 +49,10 @@ export default function AppLoginPage() {
                         <Leaf className="h-8 w-8" />
                     </div>
                     <h1 className="text-xl font-black text-slate-900 uppercase tracking-wide">
-                        TIENDA DE PLANTAS — ERP / CRM
+                        TIENDA DE PLANTAS
+                    </h1>
+                    <h1 className="text-xl font-black text-slate-900 uppercase tracking-wide">
+                        ERP / CRM
                     </h1>
                     <p className="text-xs text-slate-500 font-medium">
                         Acceso exclusivo para Personal Interno y Gestión

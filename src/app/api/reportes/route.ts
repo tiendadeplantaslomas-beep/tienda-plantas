@@ -1,6 +1,32 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+const TIPOS_INGRESO_CAJA = new Set([
+    'INGRESO',
+    'INGRESOS',
+    'ENTRADA',
+    'ENTRADAS',
+    'IN',
+    'COBRO',
+    'COBROS',
+    'DEPOSITO',
+    'DEPÓSITO'
+]);
+
+const TIPOS_EGRESO_CAJA = new Set([
+    'EGRESO',
+    'EGRESOS',
+    'SALIDA',
+    'SALIDAS',
+    'OUT',
+    'GASTO',
+    'GASTOS',
+    'RETIRO',
+    'RETIROS',
+    'PAGO',
+    'PAGOS'
+]);
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -26,9 +52,12 @@ export async function GET(request: Request) {
 
                 if (!sales || sales.length === 0) {
                     return NextResponse.json({
-                        success: true, hasData: false,
+                        success: true,
+                        hasData: false,
                         titulo: 'Reporte de Ventas y Facturación',
-                        metrics: [], chartTitle: 'Sin Ventas Registradas en este Rango', chartData: []
+                        metrics: [],
+                        chartTitle: 'Sin Ventas Registradas en este Rango',
+                        chartData: []
                     });
                 }
 
@@ -48,7 +77,8 @@ export async function GET(request: Request) {
                 });
 
                 return NextResponse.json({
-                    success: true, hasData: true,
+                    success: true,
+                    hasData: true,
                     titulo: tipo === 'ventas' ? 'Reporte de Ventas y Facturación' : 'Historial de Operaciones ERP',
                     metrics: [
                         { label: 'Facturación Total', val: `$${totalVentas.toLocaleString('es-AR')}`, var: 'Real', up: true },
@@ -56,6 +86,264 @@ export async function GET(request: Request) {
                         { label: 'Ticket Promedio', val: `$${ticketPromedio.toLocaleString('es-AR')}`, var: 'Promedio', up: true }
                     ],
                     chartTitle: 'Distribución de Ventas Recientes',
+                    chartData
+                });
+            }
+
+            if (tipo === 'ganancia_neta') {
+                const [sales, purchases] = await Promise.all([
+                    prisma.sale.findMany({
+                        where: {
+                            createdAt: { gte: fechaInicio, lte: fechaFin },
+                            status: { not: 'CANCELADO' }
+                        },
+                        include: {
+                            items: {
+                                include: { product: true }
+                            }
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    }),
+                    prisma.purchase.findMany({
+                        where: {
+                            date: { gte: fechaInicio, lte: fechaFin }
+                        },
+                        orderBy: { date: 'desc' }
+                    })
+                ]);
+
+                const hasData = sales.length > 0 || purchases.length > 0;
+                if (!hasData) {
+                    return NextResponse.json({
+                        success: true,
+                        hasData: false,
+                        titulo: 'Ganancia Neta',
+                        metrics: [],
+                        chartTitle: 'Sin Movimientos en este Rango',
+                        chartData: []
+                    });
+                }
+
+                const totalVentas = sales.reduce((acc, s) => acc + (s.total || 0), 0);
+
+                const costoMercaderiaVendida = sales.reduce((accVenta, s) => {
+                    const costoItems = (s.items || []).reduce((accItem, item) => {
+                        const unitCost = (item.product?.cost || 0) + (item.product?.otherCosts || 0);
+                        return accItem + unitCost * (item.quantity || 0);
+                    }, 0);
+                    return accVenta + costoItems;
+                }, 0);
+
+                const totalCompras = purchases.reduce((acc, p) => acc + (p.total || 0), 0);
+                const gananciaNeta = totalVentas - costoMercaderiaVendida - totalCompras;
+
+                const baseDivisor = Math.max(totalVentas, Math.abs(gananciaNeta), 1);
+                const itemsDesglose = [
+                    {
+                        label: 'VENTAS DEL PERÍODO',
+                        monto: totalVentas,
+                        color: 'bg-emerald-700'
+                    },
+                    {
+                        label: 'COSTO MERCADERÍA VENDIDA',
+                        monto: costoMercaderiaVendida,
+                        color: 'bg-amber-600'
+                    },
+                    {
+                        label: 'COMPRAS EN PERÍODO',
+                        monto: totalCompras,
+                        color: 'bg-stone-700'
+                    },
+                    {
+                        label: 'GANANCIA NETA',
+                        monto: gananciaNeta,
+                        color: gananciaNeta >= 0 ? 'bg-emerald-600' : 'bg-rose-700'
+                    }
+                ];
+
+                const chartData = itemsDesglose.map((d) => ({
+                    label: d.label,
+                    pct: Math.min(100, Math.max(5, Math.round((Math.abs(d.monto) / baseDivisor) * 100))),
+                    val: `$${d.monto.toLocaleString('es-AR')}`,
+                    color: d.color
+                }));
+
+                return NextResponse.json({
+                    success: true,
+                    hasData: true,
+                    titulo: 'Ganancia Neta',
+                    metrics: [
+                        {
+                            label: 'Ganancia Neta',
+                            val: `$${gananciaNeta.toLocaleString('es-AR')}`,
+                            var: gananciaNeta >= 0 ? 'Positiva' : 'Negativa',
+                            up: gananciaNeta >= 0
+                        },
+                        {
+                            label: 'Ventas del Período',
+                            val: `$${totalVentas.toLocaleString('es-AR')}`,
+                            var: `${sales.length} op.`,
+                            up: true
+                        },
+                        {
+                            label: 'Costos y Compras',
+                            val: `$${(costoMercaderiaVendida + totalCompras).toLocaleString('es-AR')}`,
+                            var: 'CMV + Compras',
+                            up: false
+                        }
+                    ],
+                    chartTitle: 'Composición de Ganancia Neta en el Período',
+                    chartData
+                });
+            }
+
+            if (tipo === 'consolidado_negocio') {
+                const [sales, purchases, cashMovements] = await Promise.all([
+                    prisma.sale.findMany({
+                        where: {
+                            createdAt: { gte: fechaInicio, lte: fechaFin },
+                            status: { not: 'CANCELADO' }
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    }),
+                    prisma.purchase.findMany({
+                        where: {
+                            date: { gte: fechaInicio, lte: fechaFin }
+                        },
+                        orderBy: { date: 'desc' }
+                    }),
+                    prisma.cashMovement.findMany({
+                        where: {
+                            createdAt: { gte: fechaInicio, lte: fechaFin }
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    })
+                ]);
+
+                const hasData = sales.length > 0 || purchases.length > 0 || cashMovements.length > 0;
+                if (!hasData) {
+                    return NextResponse.json({
+                        success: true,
+                        hasData: false,
+                        titulo: 'Consolidado de Cuenta Corriente del Negocio',
+                        metrics: [],
+                        chartTitle: 'Sin Movimientos Consolidados en este Rango',
+                        chartData: []
+                    });
+                }
+
+                const ingresosCobrados = sales.reduce((acc, s) => {
+                    const totalVenta = s.total || 0;
+                    const cobrado = s.paidAmount > 0 ? s.paidAmount : (s.isPaid ? totalVenta : 0);
+                    return acc + Math.min(totalVenta, cobrado);
+                }, 0);
+
+                const saldoPorCobrarClientes = sales.reduce((acc, s) => {
+                    const totalVenta = s.total || 0;
+                    const cobrado = s.paidAmount > 0 ? s.paidAmount : (s.isPaid ? totalVenta : 0);
+                    const pendiente = s.pendingBalance > 0
+                        ? s.pendingBalance
+                        : (s.isPaid ? 0 : Math.max(0, totalVenta - cobrado));
+                    return acc + pendiente;
+                }, 0);
+
+                const comprasProveedores = purchases.reduce((acc, p) => acc + (p.total || 0), 0);
+
+                let ingresosManuales = 0;
+                let egresosManuales = 0;
+
+                for (const mov of cashMovements) {
+                    const normType = (mov.type || '').trim().toUpperCase();
+                    const montoAbs = Math.abs(mov.amount || 0);
+
+                    if (TIPOS_INGRESO_CAJA.has(normType)) {
+                        ingresosManuales += montoAbs;
+                    } else if (TIPOS_EGRESO_CAJA.has(normType)) {
+                        egresosManuales += montoAbs;
+                    } else if ((mov.amount || 0) < 0) {
+                        egresosManuales += montoAbs;
+                    } else {
+                        ingresosManuales += montoAbs;
+                    }
+                }
+
+                const totalIngresosReales = ingresosCobrados + ingresosManuales;
+                const totalEgresosReales = comprasProveedores + egresosManuales;
+                const saldoNetoConsolidado = totalIngresosReales - totalEgresosReales;
+
+                const baseDivisor = Math.max(
+                    totalIngresosReales,
+                    totalEgresosReales,
+                    saldoPorCobrarClientes,
+                    Math.abs(saldoNetoConsolidado),
+                    1
+                );
+
+                const filas = [
+                    {
+                        label: 'VENTAS COBRADAS',
+                        monto: ingresosCobrados,
+                        color: 'bg-emerald-700'
+                    },
+                    {
+                        label: 'SALDO POR COBRAR (CLIENTES)',
+                        monto: saldoPorCobrarClientes,
+                        color: 'bg-sky-700'
+                    },
+                    {
+                        label: 'INGRESOS MANUALES DE CAJA',
+                        monto: ingresosManuales,
+                        color: 'bg-teal-700'
+                    },
+                    {
+                        label: 'COMPRAS A PROVEEDORES',
+                        monto: comprasProveedores,
+                        color: 'bg-amber-600'
+                    },
+                    {
+                        label: 'EGRESOS MANUALES DE CAJA',
+                        monto: egresosManuales,
+                        color: 'bg-stone-700'
+                    },
+                    {
+                        label: 'SALDO NETO CONSOLIDADO',
+                        monto: saldoNetoConsolidado,
+                        color: saldoNetoConsolidado >= 0 ? 'bg-emerald-600' : 'bg-rose-700'
+                    }
+                ];
+
+                const chartData = filas.map((f) => ({
+                    label: f.label,
+                    pct: Math.min(100, Math.max(5, Math.round((Math.abs(f.monto) / baseDivisor) * 100))),
+                    val: `$${f.monto.toLocaleString('es-AR')}`,
+                    color: f.color
+                }));
+
+                return NextResponse.json({
+                    success: true,
+                    hasData: true,
+                    titulo: 'Consolidado de Cuenta Corriente del Negocio',
+                    metrics: [
+                        {
+                            label: 'Saldo Neto Consolidado',
+                            val: `$${saldoNetoConsolidado.toLocaleString('es-AR')}`,
+                            var: saldoNetoConsolidado >= 0 ? 'A favor' : 'En contra',
+                            up: saldoNetoConsolidado >= 0
+                        },
+                        {
+                            label: 'Ingresos Reales',
+                            val: `$${totalIngresosReales.toLocaleString('es-AR')}`,
+                            var: 'Cobros + Caja',
+                            up: true
+                        },
+                        {
+                            label: 'Egresos + Por Cobrar',
+                            val: `$${totalEgresosReales.toLocaleString('es-AR')}`,
+                            var: `Pend. $${saldoPorCobrarClientes.toLocaleString('es-AR')}`,
+                            up: saldoPorCobrarClientes === 0
+                        }
+                    ],
+                    chartTitle: 'Posición Consolidada del Negocio en el Período',
                     chartData
                 });
             }
@@ -69,9 +357,12 @@ export async function GET(request: Request) {
 
                 if (!pendingSales || pendingSales.length === 0) {
                     return NextResponse.json({
-                        success: true, hasData: false,
+                        success: true,
+                        hasData: false,
                         titulo: 'Estado de Cuenta Corriente y Balance',
-                        metrics: [], chartTitle: 'Sin Movimientos de Clientes en este Rango', chartData: []
+                        metrics: [],
+                        chartTitle: 'Sin Movimientos de Clientes en este Rango',
+                        chartData: []
                     });
                 }
 
@@ -91,7 +382,8 @@ export async function GET(request: Request) {
                 });
 
                 return NextResponse.json({
-                    success: true, hasData: true,
+                    success: true,
+                    hasData: true,
                     titulo: 'Estado de Cuenta Corriente y Balance',
                     metrics: [
                         { label: 'Monto Total Operaciones', val: `$${saldoTotalDeuda.toLocaleString('es-AR')}`, var: 'Registrado', up: false },
@@ -108,9 +400,12 @@ export async function GET(request: Request) {
 
                 if (!products || products.length === 0) {
                     return NextResponse.json({
-                        success: true, hasData: false,
+                        success: true,
+                        hasData: false,
                         titulo: 'Control de Stock e Inventario',
-                        metrics: [], chartTitle: 'Sin Stock Registrado', chartData: []
+                        metrics: [],
+                        chartTitle: 'Sin Stock Registrado',
+                        chartData: []
                     });
                 }
 
@@ -118,7 +413,7 @@ export async function GET(request: Request) {
                 const valorInventario = products.reduce((acc, p) => acc + (p.price * p.stock), 0);
                 const bajoStock = products.filter(p => p.stock <= p.minStock).length;
 
-                const chartDataStock = products.slice(0, 5).map((p, i) => {
+                const chartDataStock = products.map((p, i) => {
                     const divisor = totalItems > 0 ? totalItems : 1;
                     const pct = Math.min(100, Math.max(5, Math.round((p.stock / divisor) * 100)));
                     return {
@@ -130,7 +425,8 @@ export async function GET(request: Request) {
                 });
 
                 return NextResponse.json({
-                    success: true, hasData: true,
+                    success: true,
+                    hasData: true,
                     titulo: tipo === 'stock' ? 'Control de Stock e Inventario Actual' : tipo === 'costos' ? 'Costos de Insumos y Valorización' : 'Rentabilidad Teórica por Producto',
                     metrics: [
                         { label: 'Unidades Totales', val: `${totalItems} u.`, var: 'Stock', up: true },
@@ -179,14 +475,13 @@ export async function GET(request: Request) {
             });
 
             const allCustomers = await prisma.customer.findMany({
-                orderBy: { name: 'asc' } // O podés dejarlo sin el objeto orderBy: prisma.customer.findMany()
+                orderBy: { name: 'asc' }
             });
 
             const totalClientes = allCustomers.length;
             const customerSalesMap = new Map<string, { name: string; total: number; count: number }>();
 
             salesWithCustomer.forEach(s => {
-                // Fallback seguro: si la relación de Prisma viene null, rescata el nombre del cliente o usa uno genérico
                 const nombreCliente = s.customer?.name || (s as any).customerName || 'Cliente Registrado';
                 const idCliente = s.customerId || 's/n';
 
@@ -208,7 +503,7 @@ export async function GET(request: Request) {
 
             return NextResponse.json({
                 success: true,
-                hasData: rankedCustomers.length > 0, // 👈 Se ajusta para validar si hay registros procesados
+                hasData: rankedCustomers.length > 0,
                 titulo: tipo === 'historial' ? 'Historial de Compras por Cliente' : tipo === 'embudo' ? 'Embudo de Ventas y Prospectos' : 'Productos Más Vendidos por Clientes',
                 metrics: [
                     { label: 'Total Clientes en Base', val: `${totalClientes}`, var: 'CRM', up: true },
@@ -216,7 +511,7 @@ export async function GET(request: Request) {
                     { label: 'Sin Actividad en Rango', val: `${Math.max(0, totalClientes - clientesConCompras)}`, var: 'Inactivos', up: false }
                 ],
                 chartTitle: 'Top Clientes por Volumen de Compras (En Rango)',
-                chartData: rankedCustomers.slice(0, 5).map((c, i) => {
+                chartData: rankedCustomers.map((c, i) => {
                     const pct = Math.min(100, Math.max(15, Math.round((c.total / maxVal) * 100)));
                     return {
                         label: c.name.length > 12 ? c.name.substring(0, 10) + '...' : c.name,
@@ -230,7 +525,7 @@ export async function GET(request: Request) {
 
         // Modulo Web
         if (modulo === 'web') {
-            const products = await prisma.product.findMany({ take: 5, orderBy: { stock: 'asc' } });
+            const products = await prisma.product.findMany({ orderBy: { stock: 'asc' } });
             return NextResponse.json({
                 success: true,
                 hasData: products.length > 0,
